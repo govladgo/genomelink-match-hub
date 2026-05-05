@@ -724,7 +724,10 @@ body {
 .confidence-medium { background: var(--gl-color-yellow); }
 .confidence-low { background: var(--gl-color-red); }
 
-/* -- Match Hub vendor pills -- */
+/* -- Match Hub vendor pills (in-row label) --
+   Title-case label, soft tinted bg, brand-color text. Mirrors the brand
+   palette used by the VendorFilterBar (Figma DNA-Match-Tools status labels)
+   so the two surfaces use the same tokens. */
 .vendor-pill {
   display: inline-flex;
   align-items: center;
@@ -733,16 +736,15 @@ body {
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  /* No text-transform / letter-spacing — labels render as 23andMe / GEDmatch */
 }
-.vendor-pill--23andme { background: rgba(0, 168, 144, 0.1); color: #00A890; }
-.vendor-pill--ancestry { background: rgba(0, 109, 80, 0.1); color: #006D50; }
-.vendor-pill--ftdna { background: rgba(0, 78, 153, 0.1); color: #004E99; }
-.vendor-pill--myheritage { background: rgba(126, 30, 156, 0.1); color: #7E1E9C; }
-.vendor-pill--gedmatch { background: rgba(217, 138, 36, 0.1); color: #D98A24; }
-.vendor-pill--manual { background: rgba(120, 120, 120, 0.1); color: #666; }
-.vendor-pill--other { background: rgba(120, 120, 120, 0.1); color: #666; }
+.vendor-pill--23andme   { background: rgba(213, 15, 103, 0.10); color: #d50f67; }
+.vendor-pill--ancestry  { background: rgba(156, 190, 48, 0.18); color: #6a8d10; }
+.vendor-pill--myheritage{ background: rgba(229, 108, 48, 0.12); color: #e56c30; }
+.vendor-pill--ftdna     { background: rgba(0, 61, 122, 0.10);   color: #003D7A; }
+.vendor-pill--gedmatch  { background: rgba(242, 160, 61, 0.18); color: #b27418; }
+.vendor-pill--manual    { background: rgba(120, 120, 120, 0.10); color: #666; }
+.vendor-pill--other     { background: rgba(120, 120, 120, 0.10); color: #666; }
 .duplicate-group {
   border: 1px solid var(--gl-color-border-light);
   border-radius: 10px;
