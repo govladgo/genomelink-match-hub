@@ -1,3 +1,26 @@
+/**
+ * 23andMe Migration Assistant — DISABLED
+ *
+ * The /migrate route is currently hidden. This stub returns 404 so the route
+ * doesn't render publicly. The original implementation is preserved in the
+ * comment block below — to re-enable:
+ *
+ *   1. Replace the `MigratePage` export below with the original (uncomment block)
+ *   2. Re-add the link in app/page.tsx (see the commented-out <Link> block there)
+ *
+ * Hidden on 2026-05-05 per product decision; flow + dedup logic intact.
+ */
+
+import { notFound } from 'next/navigation';
+
+export default function MigratePage() {
+  notFound();
+}
+
+/* =============================================================================
+   ORIGINAL IMPLEMENTATION — preserved for easy restoration. To re-enable, copy
+   this block above the notFound stub and remove the stub.
+
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -24,7 +47,6 @@ export default function MigratePage() {
 
   const handleUploadClick = useCallback(() => {
     setUploadStatus('uploading');
-    // Simulate upload + processing
     setTimeout(() => {
       setUploadStatus('done');
       setStep(2);
@@ -37,7 +59,6 @@ export default function MigratePage() {
       background: 'var(--gl-color-bg)',
       fontFamily: 'var(--gl-font)',
     }}>
-      {/* Header */}
       <header style={{
         background: 'var(--gl-color-surface)',
         borderBottom: '1px solid var(--gl-color-border-light)',
@@ -67,9 +88,7 @@ export default function MigratePage() {
         </div>
       </header>
 
-      {/* Main */}
       <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
-        {/* Stepper */}
         <div style={{
           background: 'var(--gl-color-surface)',
           borderRadius: 12,
@@ -80,7 +99,6 @@ export default function MigratePage() {
           <GLStepper steps={STEPS} currentStep={step} />
         </div>
 
-        {/* Step 0: Export instructions */}
         {step === 0 && (
           <div style={panelStyle}>
             <h3 style={panelTitle}>Step 1: Export your data from 23andMe</h3>
@@ -91,9 +109,9 @@ export default function MigratePage() {
 
             <ol style={{ margin: '12px 0', paddingLeft: 20, lineHeight: 1.7, fontSize: 13, color: 'var(--gl-color-text-secondary)' }}>
               <li>Sign in to <strong>you.23andme.com</strong></li>
-              <li>Go to <strong>Settings → Browse Raw Data</strong> and download your raw genome file (you&apos;ll need it later)</li>
-              <li>Open <strong>DNA Relatives</strong> and click <strong>Download</strong> (CSV format) — this gives you your match list</li>
-              <li>For each close match (recommended top 100), open their profile and use the <strong>Aggregate</strong> tab to record shared segments</li>
+              <li>Go to <strong>Settings → Browse Raw Data</strong> and download your raw genome file</li>
+              <li>Open <strong>DNA Relatives</strong> and click <strong>Download</strong> (CSV format)</li>
+              <li>For each close match, open their profile and use the <strong>Aggregate</strong> tab to record shared segments</li>
               <li>Save all files locally — TTAM closure means you cannot re-export later</li>
             </ol>
 
@@ -103,22 +121,18 @@ export default function MigratePage() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
-              <button
-                onClick={() => setStep(1)}
-                className="gl-btn gl-btn--primary"
-              >
-                I&apos;ve exported my data →
+              <button onClick={() => setStep(1)} className="gl-btn gl-btn--primary">
+                I've exported my data →
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 1: Upload */}
         {step === 1 && (
           <div style={panelStyle}>
             <h3 style={panelTitle}>Step 2: Upload to Genomelink</h3>
             <p style={panelDesc}>
-              Upload your 23andMe export. We&apos;ll cross-reference it with your matches on
+              Upload your 23andMe export. We'll cross-reference it with your matches on
               other vendors and find duplicate people.
             </p>
 
@@ -150,27 +164,23 @@ export default function MigratePage() {
             </div>
 
             <p style={{ fontSize: 11, color: 'var(--gl-color-text-muted)', textAlign: 'center', marginTop: 12 }}>
-              Mock mode: clicking &quot;Use sample data&quot; loads pre-built matches for you to try the dedup flow.
+              Mock mode: clicking "Use sample data" loads pre-built matches for you to try the dedup flow.
             </p>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
-              <button
-                onClick={() => setStep(0)}
-                className="gl-btn gl-btn--secondary"
-              >
+              <button onClick={() => setStep(0)} className="gl-btn gl-btn--secondary">
                 ← Back
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 2: Review duplicates */}
         {step === 2 && (
           <div style={panelStyle}>
             <h3 style={panelTitle}>Step 3: Review duplicates</h3>
             <p style={panelDesc}>
               We found <strong>{groups.length} groups</strong> of matches that look like the same person across multiple vendors.
-              Merge the ones you&apos;re confident about; reject false positives.
+              Merge the ones you're confident about; reject false positives.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
@@ -196,23 +206,16 @@ export default function MigratePage() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
-              <button
-                onClick={() => setStep(1)}
-                className="gl-btn gl-btn--secondary"
-              >
+              <button onClick={() => setStep(1)} className="gl-btn gl-btn--secondary">
                 ← Back
               </button>
-              <button
-                onClick={() => setStep(3)}
-                className="gl-btn gl-btn--primary"
-              >
+              <button onClick={() => setStep(3)} className="gl-btn gl-btn--primary">
                 Save and finish ({merged.size} merged)
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Done */}
         {step === 3 && (
           <div style={{ ...panelStyle, textAlign: 'center', padding: 40 }}>
             <div style={{
@@ -231,11 +234,7 @@ export default function MigratePage() {
               {merged.size > 0 && ` ${merged.size} duplicate ${merged.size === 1 ? 'group was' : 'groups were'} merged.`}
             </p>
 
-            <Link
-              href="/"
-              className="gl-btn gl-btn--primary"
-              style={{ textDecoration: 'none', display: 'inline-block' }}
-            >
+            <Link href="/" className="gl-btn gl-btn--primary" style={{ textDecoration: 'none', display: 'inline-block' }}>
               Open unified inbox →
             </Link>
           </div>
@@ -273,3 +272,5 @@ const alertBox: React.CSSProperties = {
   lineHeight: 1.5,
   marginTop: 12,
 };
+
+============================================================================= */

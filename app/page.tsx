@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import Link from 'next/link';
+// 23andMe Migration feature hidden — re-enable by uncommenting below + the
+// <Link>...</Link> block in the header further down + restoring the body of
+// app/migrate/page.tsx
+// import Link from 'next/link';
 import { DNAMatch } from '@/data/types';
 import { useDeduplication } from '@/hooks/useDeduplication';
 import { VendorFilterBar } from '@/components/hub/VendorFilterBar';
@@ -146,6 +149,10 @@ export default function HomePage() {
                 onSelect={handleSelectUser}
               />
             )}
+            {/* 23andMe Migration link hidden for now. To re-enable:
+              1. Uncomment the `import Link from 'next/link'` at the top
+              2. Uncomment this block
+              3. Restore the body of app/migrate/page.tsx
             <Link
               href="/migrate"
               className="gl-btn gl-btn--secondary"
@@ -153,6 +160,7 @@ export default function HomePage() {
             >
               23andMe Migration →
             </Link>
+            */}
             <span style={{
               padding: '4px 10px', borderRadius: 6,
               background: 'rgba(69, 130, 201, 0.1)',
