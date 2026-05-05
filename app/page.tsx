@@ -84,9 +84,11 @@ export default function HomePage() {
   };
 
   const {
-    groups, mergedGroupIds, rejectedGroupIds, mergedAwayMatchIds,
+    groups, mergedMatchIds, rejectedMatchIds, mergedAwayMatchIds,
     pendingGroups, highConfidenceCount,
-    merge, unmerge, reject, mergeAllHighConfidence, reset,
+    matchDecisionState,
+    mergeMatch, rejectMatch, undoDecision,
+    mergeAllHighConfidence, reset,
   } = useDeduplication(matches);
 
   const vendorCounts = useMemo(() => {
@@ -116,9 +118,22 @@ export default function HomePage() {
     });
   };
 
-  const allGroupsForReview = pendingGroups.concat(
-    groups.filter(g => mergedGroupIds.has(g.id))
-  );
+  // Show every group that contains any decision (merged or rejected) OR is still pending.
+  // Groups whose siblings are ALL still untouched and groups that are fully resolved both
+  // appear; we just sort fully-resolved groups to the bottom so the work-to-do is on top.
+  const allGroupsForReview = useMemo(() => {
+    const annotated = groups.map(g => {
+      const siblingStates = g.matchIds.slice(1).map(id => matchDecisionState(id));
+      const hasPending = siblingStates.some(s => s === 'pending');
+      const hasDecision = siblingStates.some(s => s === 'merged' || s === 'rejected');
+      return { group: g, hasPending, hasDecision };
+    });
+    // Pending groups first (preserving confidence order from the engine), then resolved groups.
+    return [
+      ...annotated.filter(a => a.hasPending).map(a => a.group),
+      ...annotated.filter(a => !a.hasPending && a.hasDecision).map(a => a.group),
+    ];
+  }, [groups, matchDecisionState]);
 
   return (
     <div style={{
@@ -209,7 +224,7 @@ export default function HomePage() {
             <div style={statLabel}>Duplicate groups</div>
           </div>
           <div style={statCard}>
-            <div style={statValue}>{mergedGroupIds.size}</div>
+            <div style={statValue}>{mergedMatchIds.size}</div>
             <div style={statLabel}>Merged</div>
           </div>
         </div>
@@ -344,7 +359,7 @@ export default function HomePage() {
                     Merge {highConfidenceCount} high-confidence
                   </button>
                 )}
-                {(mergedGroupIds.size > 0 || rejectedGroupIds.size > 0) && (
+                {(mergedMatchIds.size > 0 || rejectedMatchIds.size > 0) && (
                   <button
                     onClick={reset}
                     className="gl-btn gl-btn--secondary"
@@ -376,20 +391,20 @@ export default function HomePage() {
                     key={g.id}
                     group={g}
                     matches={matches}
-                    isMerged={mergedGroupIds.has(g.id)}
-                    onMerge={merge}
-                    onUnmerge={unmerge}
-                    onReject={reject}
+                    decisionState={matchDecisionState}
+                    onMergeMatch={mergeMatch}
+                    onRejectMatch={rejectMatch}
+                    onUndoDecision={undoDecision}
                   />
                 ))
               )}
 
-              {rejectedGroupIds.size > 0 && (
+              {rejectedMatchIds.size > 0 && (
                 <p style={{
                   fontSize: 11, color: 'var(--gl-color-text-muted)',
                   textAlign: 'center', marginTop: 8,
                 }}>
-                  {rejectedGroupIds.size} group{rejectedGroupIds.size !== 1 ? 's' : ''} marked &quot;not a duplicate&quot;.
+                  {rejectedMatchIds.size} record{rejectedMatchIds.size !== 1 ? 's' : ''} marked &quot;not a duplicate&quot;.
                 </p>
               )}
             </div>
