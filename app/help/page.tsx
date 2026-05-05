@@ -144,7 +144,7 @@ export default function MatchHubHelpPage() {
               <li>Browse the <strong>Unified Inbox</strong> tab — every match from every vendor in one list.</li>
               <li>Use the vendor chips to filter by vendor (toggle on/off).</li>
               <li>Switch to the <strong>Duplicates</strong> tab to see automatically-detected cross-vendor matches.</li>
-              <li>For each duplicate group, click <strong>Merge into one match</strong> or <strong>Not a duplicate</strong> — or use <strong>Merge all high-confidence</strong> to bulk-process.</li>
+              <li>Inside each group, decide each sibling record one by one with its own <strong>Merge</strong> or <strong>Not a duplicate</strong> button — or use <strong>Merge all high-confidence</strong> to bulk-process every sibling across high-confidence groups.</li>
             </ol>
 
             <div style={tipCallout}>
@@ -188,7 +188,7 @@ export default function MatchHubHelpPage() {
                   Why name is a hard gate
                 </a>
                 <a href="#review-actions" style={tocLink}>
-                  Reviewing groups: merge, unmerge, reject
+                  Reviewing groups: per-record decisions
                 </a>
                 <div style={{ ...tocGroupTitle, marginTop: 16 }}>Demo &amp; glossary</div>
                 <a href="#demo-data" style={tocLink}>
@@ -341,13 +341,28 @@ export default function MatchHubHelpPage() {
 
           {/* === Review actions === */}
           <section id="review-actions" style={sectionGroup}>
-            <h3 style={h3Style}>Reviewing groups: merge, unmerge, reject</h3>
+            <h3 style={h3Style}>Reviewing groups: per-record decisions</h3>
+            <p style={bodyText}>
+              Each duplicate group has one <strong>primary</strong> record (marked with a <em>Primary</em>
+              tag) and one or more <strong>sibling</strong> records the engine thinks describe the same
+              person. You decide each sibling individually — useful when a group has 3+ records and you&apos;re
+              confident about one but not another.
+            </p>
             <ul style={unorderedList}>
-              <li><strong>Merge into one match</strong> — accept the duplicate. The secondary records collapse out of the inbox.</li>
-              <li><strong>Not a duplicate</strong> — reject the suggestion. Both records stay independent in the inbox.</li>
-              <li><strong>Unmerge</strong> — undo a previous merge. The records reappear separately.</li>
-              <li><strong>Reset</strong> — restore all groups to their initial pending state (top of the Duplicates tab).</li>
+              <li><strong>Merge</strong> — confirm this sibling is the same person as the primary. The sibling collapses out of the unified inbox.</li>
+              <li><strong>Not a duplicate</strong> — confirm this sibling is a different person. It stays in the inbox as its own record, ignored by future dedup runs.</li>
+              <li><strong>Undo</strong> — appears next to a decision pill; reverts that one record to pending.</li>
+              <li><strong>Merge all high-confidence</strong> (bulk) — accepts every still-pending sibling across all groups whose confidence is ≥ 0.9.</li>
+              <li><strong>Reset</strong> — clears every per-record decision and returns the entire Duplicates tab to its initial state.</li>
             </ul>
+            <div style={tipCallout}>
+              <div style={calloutTitle}>Group state</div>
+              <div>
+                A group shows a <strong>Resolved</strong> badge once every sibling has a decision (merged or
+                rejected) and at least one was merged. Groups with no decisions yet appear at the top of the
+                list; resolved groups sort to the bottom so the work-to-do is always visible first.
+              </div>
+            </div>
           </section>
 
           {/* === Demo data === */}
@@ -410,7 +425,13 @@ export default function MatchHubHelpPage() {
               <dd style={dd}>The dedup engine&apos;s 0–1 score for the likelihood that two cross-vendor records are the same biological person. ≥0.7 to suggest, ≥0.9 for high-confidence bulk merge.</dd>
 
               <dt style={dt}>Primary record</dt>
-              <dd style={dd}>When a duplicate group is merged, the primary record stays visible in the unified inbox; the secondary records hide behind it.</dd>
+              <dd style={dd}>The first record (lowest ID) in a duplicate group — the anchor. Sibling records get merged into the primary; the primary itself never has a merge button.</dd>
+
+              <dt style={dt}>Sibling record</dt>
+              <dd style={dd}>Any non-primary record inside a duplicate group. Each sibling has its own merge / not-a-duplicate decision.</dd>
+
+              <dt style={dt}>Resolved group</dt>
+              <dd style={dd}>A group where every sibling has a decision. Shown with a green &ldquo;Resolved&rdquo; badge in the header and sorted to the bottom of the Duplicates tab.</dd>
             </dl>
           </section>
 
