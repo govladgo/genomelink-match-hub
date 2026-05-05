@@ -214,30 +214,59 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Tab switcher */}
-        <div style={{
+        {/* Tab switcher — Figma node 11842:24304 (desktop) / 11842:24403 (mobile) */}
+        <div className="tab-switcher" style={{
           display: 'flex',
-          gap: 0,
+          alignItems: 'flex-start',
+          gap: 4,
           marginBottom: 20,
-          background: 'var(--gl-color-surface)',
-          borderRadius: 10,
+          background: 'rgba(201, 214, 228, 0.6)',
+          borderRadius: 16,
           padding: 4,
-          boxShadow: 'var(--gl-shadow-sm)',
           width: 'fit-content',
         }}>
           <button
             onClick={() => setActiveTab('inbox')}
+            className={`tab-pill${activeTab === 'inbox' ? ' tab-pill--active' : ''}`}
             style={tabButton(activeTab === 'inbox')}
           >
             Unified Inbox ({inboxMatches.length})
           </button>
           <button
             onClick={() => setActiveTab('duplicates')}
+            className={`tab-pill${activeTab === 'duplicates' ? ' tab-pill--active' : ''}`}
             style={tabButton(activeTab === 'duplicates')}
           >
-            Duplicates ({pendingGroups.length}{pendingGroups.length > 0 && highConfidenceCount > 0 ? ` · ${highConfidenceCount} high-confidence` : ''})
+            Duplicates ({pendingGroups.length}
+            {pendingGroups.length > 0 && highConfidenceCount > 0 && (
+              <span className="dup-suffix"> · {highConfidenceCount} high-confidence</span>
+            )}
+            )
           </button>
         </div>
+
+        {/* Mobile responsive — Figma 11842:24403:
+            - switcher fills the row
+            - inactive tabs shrink to fit
+            - active tab grows to take remaining space
+            - drop the verbose 'high-confidence' suffix on narrow screens */}
+        <style jsx>{`
+          @media (max-width: 600px) {
+            .tab-switcher {
+              width: 100% !important;
+            }
+            .tab-pill {
+              flex: 0 1 auto;
+              min-width: 0;
+            }
+            .tab-pill--active {
+              flex: 1 1 auto !important;
+            }
+            .dup-suffix {
+              display: none;
+            }
+          }
+        `}</style>
 
         {/* Tab content */}
         {activeTab === 'inbox' ? (
@@ -404,16 +433,25 @@ const statLabel: React.CSSProperties = {
   marginTop: 2,
 };
 
+// Figma tokens (DNA-Match-Tools): Tabs row 11842:24304 / 11842:24403
+//   container bg = Tertiary/Gray/Semi 60% (#C9D6E4 @ 60% = rgba(201,214,228,0.6))
+//   active pill  = Primary/Basic White (#FFFFFF) + drop-shadow 0 4px 5px rgba(74,93,128,0.13)
+//   text         = Primary/Basic Dark (#263856), unchanged across active/inactive
+//   typography   = Platform/S Text Semibold (14/20, weight 600)
 function tabButton(active: boolean): React.CSSProperties {
   return {
-    padding: '8px 16px',
+    padding: '6px 24px',
     border: 'none',
-    background: active ? 'var(--gl-color-primary-dark)' : 'transparent',
-    color: active ? '#fff' : 'var(--gl-color-text-secondary)',
-    fontSize: 13,
+    background: active ? '#FFFFFF' : 'transparent',
+    color: '#263856',
+    fontSize: 14,
     fontWeight: 600,
-    borderRadius: 8,
+    lineHeight: '20px',
+    borderRadius: 12,
     cursor: 'pointer',
-    transition: 'all 0.15s',
+    transition: 'background 0.15s, box-shadow 0.15s',
+    boxShadow: active ? '0px 4px 5px rgba(74, 93, 128, 0.13)' : 'none',
+    fontFamily: 'var(--gl-font)',
+    whiteSpace: 'nowrap',
   };
 }
