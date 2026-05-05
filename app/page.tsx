@@ -194,22 +194,22 @@ export default function HomePage() {
             Loading matches…
           </div>
         )}
-        {/* Stats bar */}
+        {/* Stats bar — Figma node 11842:23945 (desktop) / 11842:23955 (mobile) */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
           <div style={statCard}>
             <div style={statValue}>{matches.length.toLocaleString()}</div>
             <div style={statLabel}>Total entries</div>
           </div>
           <div style={statCard}>
-            <div style={{ ...statValue, color: 'var(--gl-color-secondary)' }}>{Object.keys(vendorCounts).length}</div>
+            <div style={statValue}>{Object.keys(vendorCounts).length}</div>
             <div style={statLabel}>Vendors</div>
           </div>
           <div style={statCard}>
-            <div style={{ ...statValue, color: 'var(--gl-color-primary-attention)' }}>{groups.length}</div>
+            <div style={statValue}>{groups.length}</div>
             <div style={statLabel}>Duplicate groups</div>
           </div>
           <div style={statCard}>
-            <div style={{ ...statValue, color: 'var(--gl-color-positive)' }}>{mergedGroupIds.size}</div>
+            <div style={statValue}>{mergedGroupIds.size}</div>
             <div style={statLabel}>Merged</div>
           </div>
         </div>
@@ -411,26 +411,36 @@ export default function HomePage() {
   );
 }
 
+// Figma tokens (DNA-Match-Tools): Segment stats 11842:23945 / 11842:23955
+//   container bg = Tertiary/Gray/Semi 20% (#C9D6E4 @ 20% = rgba(201,214,228,0.2))
+//   value        = Primary/Basic Dark (#263856), Platform/H4 Bold (20/28, weight 700)
+//   label        = Tertiary/Gray/Dark 2 (#6786AC), Platform/XS Text Semibold (12/16, weight 600)
+//   geometry     = padding 8/6, gap 4, radius 12, width 112 (min); flex:1 to fill row
 const statCard: React.CSSProperties = {
   flex: 1,
-  minWidth: 110,
-  padding: '10px 14px',
-  borderRadius: 10,
-  background: 'var(--gl-color-surface)',
-  boxShadow: 'var(--gl-shadow-sm)',
+  minWidth: 112,
+  padding: '8px 6px',
+  borderRadius: 12,
+  background: 'rgba(201, 214, 228, 0.2)',
   textAlign: 'center',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 4,
 };
 const statValue: React.CSSProperties = {
-  fontSize: 22,
+  fontSize: 20,
   fontWeight: 700,
-  color: 'var(--gl-color-primary-dark)',
+  lineHeight: '28px',
+  color: '#263856',
+  fontFamily: 'var(--gl-font)',
 };
 const statLabel: React.CSSProperties = {
-  fontSize: 10,
-  color: 'var(--gl-color-text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginTop: 2,
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: '16px',
+  color: '#6786AC',
+  fontFamily: 'var(--gl-font)',
 };
 
 // Figma tokens (DNA-Match-Tools): Tabs row 11842:24304 / 11842:24403
