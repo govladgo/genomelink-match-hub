@@ -1,13 +1,17 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { mockMatches } from '@/data/mock/matches';
 import { DNAMatch } from '@/data/types';
 import { useDeduplication } from '@/hooks/useDeduplication';
 import { VendorFilterBar } from '@/components/hub/VendorFilterBar';
 import { MatchRow } from '@/components/hub/MatchRow';
 import { DuplicateGroupCard } from '@/components/hub/DuplicateGroupCard';
+import { UserSwitcher } from '@/components/UserSwitcher';
+import {
+  loadUserIndex, loadUserDataset,
+  getSelectedUserIdFromUrl, setSelectedUserIdInUrl,
+} from '@/data/adapters/realData';
 
 const ALL_VENDORS: DNAMatch['source'][] = [
   '23andme', 'ancestry', 'ftdna', 'myheritage', 'gedmatch',
@@ -15,32 +19,87 @@ const ALL_VENDORS: DNAMatch['source'][] = [
 
 type Tab = 'inbox' | 'duplicates';
 
+interface IndexEntry {
+  id: string;
+  displayName: string;
+  initials: string;
+  avatarColor: string;
+  primaryPopulation: string;
+  matchCount: number;
+}
+
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<Tab>('inbox');
   const [selectedVendors, setSelectedVendors] = useState<Set<DNAMatch['source']>>(
     new Set(ALL_VENDORS)
   );
 
+  // User selection + data loading
+  const [userIndex, setUserIndex] = useState<IndexEntry[]>([]);
+  const [activeUserId, setActiveUserId] = useState<string>('user-1');
+  const [matches, setMatches] = useState<DNAMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load index on mount, then load the active user's data
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const index = await loadUserIndex();
+        if (cancelled) return;
+        setUserIndex(index);
+        const initialId = getSelectedUserIdFromUrl();
+        const validId = index.find((u) => u.id === initialId) ? initialId : index[0]?.id;
+        if (validId) {
+          setActiveUserId(validId);
+          const ds = await loadUserDataset(validId);
+          if (!cancelled) {
+            setMatches(ds.matches);
+            setLoading(false);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load user data:', err);
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSelectUser = async (userId: string) => {
+    setLoading(true);
+    setActiveUserId(userId);
+    setSelectedUserIdInUrl(userId);
+    try {
+      const ds = await loadUserDataset(userId);
+      setMatches(ds.matches);
+    } catch (err) {
+      console.error('Failed to load user data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const {
     groups, mergedGroupIds, rejectedGroupIds, mergedAwayMatchIds,
     pendingGroups, highConfidenceCount,
     merge, unmerge, reject, mergeAllHighConfidence, reset,
-  } = useDeduplication(mockMatches);
+  } = useDeduplication(matches);
 
   const vendorCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (let i = 0; i < mockMatches.length; i++) {
-      counts[mockMatches[i].source] = (counts[mockMatches[i].source] || 0) + 1;
+    for (let i = 0; i < matches.length; i++) {
+      counts[matches[i].source] = (counts[matches[i].source] || 0) + 1;
     }
     return counts;
-  }, []);
+  }, [matches]);
 
   // Inbox: all matches except those merged into another (the secondary entries of merged groups)
   const inboxMatches = useMemo(() => {
-    return mockMatches.filter(m =>
+    return matches.filter(m =>
       selectedVendors.has(m.source) && !mergedAwayMatchIds.has(m.id)
     );
-  }, [selectedVendors, mergedAwayMatchIds]);
+  }, [matches, selectedVendors, mergedAwayMatchIds]);
 
   const toggleVendor = (vendor: DNAMatch['source']) => {
     setSelectedVendors(prev => {
@@ -80,6 +139,13 @@ export default function HomePage() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {userIndex.length > 0 && (
+              <UserSwitcher
+                users={userIndex}
+                activeId={activeUserId}
+                onSelect={handleSelectUser}
+              />
+            )}
             <Link
               href="/migrate"
               className="gl-btn gl-btn--secondary"
@@ -101,10 +167,22 @@ export default function HomePage() {
 
       {/* Main */}
       <div style={{ maxWidth: 880, margin: '0 auto', padding: 24 }}>
+        {loading && (
+          <div style={{
+            padding: 32, textAlign: 'center',
+            background: 'var(--gl-color-surface)',
+            borderRadius: 12,
+            boxShadow: 'var(--gl-shadow-sm)',
+            marginBottom: 20,
+            fontSize: 13, color: 'var(--gl-color-text-muted)',
+          }}>
+            Loading matches…
+          </div>
+        )}
         {/* Stats bar */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
           <div style={statCard}>
-            <div style={statValue}>{mockMatches.length}</div>
+            <div style={statValue}>{matches.length.toLocaleString()}</div>
             <div style={statLabel}>Total entries</div>
           </div>
           <div style={statCard}>
@@ -253,7 +331,7 @@ export default function HomePage() {
                   <DuplicateGroupCard
                     key={g.id}
                     group={g}
-                    matches={mockMatches}
+                    matches={matches}
                     isMerged={mergedGroupIds.has(g.id)}
                     onMerge={merge}
                     onUnmerge={unmerge}
@@ -273,6 +351,17 @@ export default function HomePage() {
             </div>
           </>
         )}
+
+        {/* Synthetic data disclaimer */}
+        <p style={{
+          marginTop: 32, padding: '8px 12px',
+          textAlign: 'center', fontSize: 10, color: 'var(--gl-color-text-muted)',
+          background: 'rgba(255, 124, 17, 0.04)',
+          border: '1px solid rgba(255, 124, 17, 0.15)',
+          borderRadius: 6,
+        }}>
+          Demo: real DNA-pair data; names, ancestry, and vendor assignments are synthesized.
+        </p>
       </div>
     </div>
   );

@@ -261,18 +261,43 @@ export const HIGH_CONFIDENCE_THRESHOLD = 0.9;
 /**
  * Run dedup across all matches. Returns groups of 2+ matches that likely
  * represent the same person across vendors.
+ *
+ * Uses last-name bucketing to keep this fast at 1000+ matches: pairs that
+ * don't share a last-name first character can never clear the 0.7 name
+ * threshold (we made name a hard gate), so we only compare within buckets.
+ *
+ * Without bucketing: O(n²) → 1500² = 2.25M compares
+ * With bucketing:    O(n²/26) → ~85K compares  (~25× speedup)
  */
 export function findDuplicateGroups(
   matches: DNAMatch[],
   threshold: number = SUGGEST_THRESHOLD
 ): DuplicateGroup[] {
-  // Score every cross-vendor pair
-  const pairs: PairScore[] = [];
+  // Bucket matches by normalized last-name first character.
+  // Pairs across buckets cannot share a last name, and our name gate requires
+  // exact-last-name match for high similarity — so cross-bucket pairs would
+  // hit the 0.65 cap or the 0.4 sibling-gate, both below the 0.7 threshold.
+  const nameBuckets: Record<string, DNAMatch[]> = {};
   for (let i = 0; i < matches.length; i++) {
-    for (let j = i + 1; j < matches.length; j++) {
-      const score = scorePair(matches[i], matches[j]);
-      if (score.confidence >= threshold) {
-        pairs.push(score);
+    const m = matches[i];
+    const tokens = normalizeName(m.name).split(' ');
+    const lastName = tokens[tokens.length - 1];
+    const bucketKey = lastName.charAt(0) || '_';
+    if (!nameBuckets[bucketKey]) nameBuckets[bucketKey] = [];
+    nameBuckets[bucketKey].push(m);
+  }
+
+  // Score within each bucket only
+  const pairs: PairScore[] = [];
+  const nameBucketKeys = Object.keys(nameBuckets);
+  for (let b = 0; b < nameBucketKeys.length; b++) {
+    const bucket = nameBuckets[nameBucketKeys[b]];
+    for (let i = 0; i < bucket.length; i++) {
+      for (let j = i + 1; j < bucket.length; j++) {
+        const score = scorePair(bucket[i], bucket[j]);
+        if (score.confidence >= threshold) {
+          pairs.push(score);
+        }
       }
     }
   }

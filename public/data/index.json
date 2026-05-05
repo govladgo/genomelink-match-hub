@@ -1,0 +1,84 @@
+{
+  "users": [
+    {
+      "id": "user-1",
+      "displayName": "Michelle Mitchell",
+      "initials": "MM",
+      "avatarColor": "#FF6B6B",
+      "primaryPopulation": "british_irish",
+      "matchCount": 1737
+    },
+    {
+      "id": "user-2",
+      "displayName": "Heidi Schneider",
+      "initials": "HS",
+      "avatarColor": "#4ECDC4",
+      "primaryPopulation": "germanic",
+      "matchCount": 1742
+    },
+    {
+      "id": "user-3",
+      "displayName": "Anastasiya Morozova",
+      "initials": "AM",
+      "avatarColor": "#DDA0DD",
+      "primaryPopulation": "eastern_european",
+      "matchCount": 1735
+    },
+    {
+      "id": "user-4",
+      "displayName": "Caroline Mitchell",
+      "initials": "CM",
+      "avatarColor": "#A9DFBF",
+      "primaryPopulation": "british_irish",
+      "matchCount": 1733
+    },
+    {
+      "id": "user-5",
+      "displayName": "Natalia Wojcik",
+      "initials": "NW",
+      "avatarColor": "#A3E4D7",
+      "primaryPopulation": "eastern_european",
+      "matchCount": 1741
+    },
+    {
+      "id": "user-6",
+      "displayName": "Ursula Becker",
+      "initials": "UB",
+      "avatarColor": "#F0B27A",
+      "primaryPopulation": "germanic",
+      "matchCount": 1751
+    },
+    {
+      "id": "user-7",
+      "displayName": "Yong Choi",
+      "initials": "YC",
+      "avatarColor": "#85C1E9",
+      "primaryPopulation": "east_asian",
+      "matchCount": 1743
+    },
+    {
+      "id": "user-8",
+      "displayName": "Andriy Petrov",
+      "initials": "AP",
+      "avatarColor": "#A9CCE3",
+      "primaryPopulation": "eastern_european",
+      "matchCount": 1740
+    },
+    {
+      "id": "user-9",
+      "displayName": "Devorah Cohen",
+      "initials": "DC",
+      "avatarColor": "#FAD7A0",
+      "primaryPopulation": "ashkenazi_jewish",
+      "matchCount": 1744
+    },
+    {
+      "id": "user-10",
+      "displayName": "Samuel Katz",
+      "initials": "SK",
+      "avatarColor": "#45B7D1",
+      "primaryPopulation": "ashkenazi_jewish",
+      "matchCount": 1738
+    }
+  ]
+}
