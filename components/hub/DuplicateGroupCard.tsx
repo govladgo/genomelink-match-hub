@@ -99,13 +99,24 @@ export function DuplicateGroupCard({
       }}
     >
       {/* Header row — Figma 12327:2058: no avatar, cM-led title +
-          "N vendors" subtitle, % confidence + chevron on the right. */}
-      <div
+          "N vendors" subtitle, % confidence + chevron on the right.
+
+          Rendered as a real <button> so the toggle is keyboard-activatable
+          (Enter / Space) and announced as a button by screen readers
+          (QA_RESULTS.md → Nit N1). The element is a full-width button
+          styled to look exactly like the previous <div onClick>. */}
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} duplicate group: ${cmLabel}, ${groupMatches.length} candidates, ${confidencePct}% confidence`}
         style={{
+          all: 'unset',
+          boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
           gap: 16,
           padding: '8px 0',
+          width: '100%',
           cursor: 'pointer',
         }}
         onClick={() => setExpanded(!expanded)}
@@ -203,7 +214,7 @@ export function DuplicateGroupCard({
         >
           <path d="M6 15L12 9L18 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </div>
+      </button>
 
       {expanded && (
         <>
