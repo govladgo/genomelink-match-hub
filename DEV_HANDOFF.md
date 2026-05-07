@@ -13,7 +13,7 @@ A **unified, deduplicated DNA-match inbox across 5 vendors** (23andMe, Ancestry,
 
 Two tabs:
 - **Unified Inbox** — every match from every vendor in one list, with vendor-color-coded chips and a vendor filter bar. Sibling records that the user merges into a primary collapse out of the inbox; the primary stays visible.
-- **Duplicates** — auto-detected cross-vendor groups, each with confidence score and basis (name + cM + segments). The user makes a **per-record decision** for each non-primary sibling: `Merge` (confirm same person) or `Not a duplicate` (confirm different person). Mixed-state groups are supported — one sibling can be merged while another is pending or rejected. Bulk action: `Merge all high-confidence` accepts every still-pending sibling across all groups whose confidence is ≥ 0.9.
+- **Duplicates** — auto-detected cross-vendor groups grouped by **shared cM bracket** (±5%) and confirmed by **segment overlap** (≥ 70%). Names are not used for grouping — they're computed and shown for context (with a "Name varies" badge when spellings diverge across vendors), but the engine never gates on name. Each non-primary sibling has its own per-record decision: `Merge` (confirm same person) or `Not a duplicate`. Mixed-state groups are supported. Bulk action: `Merge all high-confidence` accepts every still-pending sibling across groups whose confidence is ≥ 0.9.
 
 A header user-switcher lets you preview 10 demo users with different network shapes (e.g. Ashkenazi-heavy vs. East Asian vs. British/Irish).
 
@@ -56,32 +56,46 @@ URL state: the active user is stored in `?user=user-N` so reloads and shares pre
 
 ## Dedup algorithm (`utils/dedupEngine.ts`)
 
-For every cross-vendor pair, three signals are computed and weighted:
+**Grouping signals (v2 — cM-bucketed):**
 
-| Signal | Weight | Computation |
-|--------|-------:|-------------|
-| Name similarity | **0.30** | Token-aware Levenshtein with last-name + first-initial logic (see `nameSimilarity()`) |
-| cM bracket | **0.30** | Linear falloff: 1 − (\|cmA − cmB\| / avgCM) / 0.15. Same biology → ±5%; ±15% upper edge |
-| Segment overlap | **0.40** | totalOverlapBp / min(totalA, totalB) summed across chromosomes |
+| Signal | Role | Computation |
+|--------|------|-------------|
+| cM bracket | Bucket key (binary) | Both records' shared cM within ±5% AND both ≥ 30 cM |
+| Segment overlap | Confidence | `totalOverlapBp / min(totalA, totalB)` summed across chromosomes |
+| Name similarity | Display only — not in confidence | Token-aware Levenshtein, surfaces a "Name varies" badge when spellings diverge |
 
-Confidence = weighted sum, capped at 1.0.
+Confidence = segment overlap (0–1).
 
-**Critical correctness rule — name is a hard gate.** When `nameSim < 0.7`, confidence = 0 regardless of other signals. Without this, sibling/cousin pairs across vendors merge incorrectly because they share surnames + segment regions + cM brackets (caught and fixed during initial verification).
-
-**Name-similarity logic** (handles common cross-vendor patterns):
+**Tunable thresholds (constants exported from `dedupEngine.ts`):**
 ```
-Same last name + same first name      → 1.00
-Same last name + initial-style match  → 0.95   ("M." prefix of "Michelle")
-Subset name                            → 0.90   ("Marta" ⊂ "Marta Bell")
-Same last name + first letter match   → 0.60–0.95   (Levenshtein-scored)
-Same last name + DIFFERENT first letter → 0.40   (siblings/cousins gate)
-Different last names                   → ≤ 0.65 (capped — never enough to clear gate)
+MIN_CM_FOR_DEDUP             = 30     // skip pairs below — too noisy
+CM_TOLERANCE                 = 0.05   // ±5% bucket width
+SEGMENT_OVERLAP_THRESHOLD    = 0.7    // floor for "is this pair a candidate?"
+HIGH_CONFIDENCE_THRESHOLD    = 0.9    // floor for "Merge all high-confidence" bulk action
 ```
 
-**Group assembly:** union-find across all pairs scoring ≥ 0.7. Confidence ≥ 0.9 marks a group as eligible for the "Merge all high-confidence" bulk action.
+**Critical correctness rule — segments are required.** Without segment data on both sides, a pair cannot auto-merge (`segmentSimilarity` returns 0). MyHeritage profiles often hide segment positions — those records appear in the inbox as singletons even when they describe the same person as another vendor's record. v2 should add a "Likely candidates" surface for cM-only pairs needing manual review.
 
-**Performance optimization (in production):**
-The naive O(n²) at 1,737 matches = ~3M comparisons per user. We bucket matches by normalized last-name first character before pairwise scoring — pairs across buckets can't share a last name and would fail the 0.7 gate anyway. Drops effective work to ~O(n²/26) = ~85K compares ≈ 0.5–1 sec in-browser. Code: `findDuplicateGroups()` builds a `nameBuckets` index, then loops only within buckets.
+**How false-positive chains are prevented:** the original cM-bucketing engine produced false-positive groups by chaining 4–7 unrelated people whose pairwise overlaps individually passed a 0.3 threshold (A↔B at 0.4, B↔C at 0.5 → A, B, C grouped via union-find). Calibrated against the demo dataset, real cross-vendor duplicates score 0.8–0.99 (same person, slightly perturbed segment positions) while unrelated chains score 0.3–0.62. Setting `SEGMENT_OVERLAP_THRESHOLD = 0.7` cleanly separates them.
+
+**Algorithm:**
+```
+findDuplicateGroups(matches):
+  1. Filter to matches with sharedCM >= MIN_CM_FOR_DEDUP   (≥ 30)
+  2. Sort by sharedCM ascending                            (O(n log n))
+  3. Sliding-window pair scoring:
+     for each match A:
+       walk forward through B until B.sharedCM > A.sharedCM × 1.05
+       skip same-vendor pairs
+       skip pairs without segments on either side
+       overlap = segmentSimilarity(A.segments, B.segments)
+       if overlap >= SEGMENT_OVERLAP_THRESHOLD: record pair
+  4. Union-find groups across all qualifying pairs
+  5. Group confidence = average pair overlap
+  6. Sort groups by confidence DESC
+```
+
+**Performance:** sort is O(n log n) ≈ 14K ops for 1,737 matches; sliding window is O(n × avg_window) where the window is small at most cM values (2–30 candidates per anchor). Total: well under 100ms per user.
 
 ---
 
@@ -194,13 +208,14 @@ interface DNAMatch {
 
 ## Known limits (flagged for prod discussion)
 
-1. **No transliteration / phonetic matching.** Cyrillic names that get romanized differently by different vendors will miss the name gate. Soundex / Metaphone / RapidFuzz on the production pipeline would help.
-2. **23andMe Migration Assistant is mock-only.** Currently disabled. The 4-step wizard structure is preserved in code but the upload/parse logic is a stub.
-3. **No real upload pipeline.** All data is preprocessed JSON. Production needs a CSV/ZIP ingestion endpoint that maps each vendor's export format to the `DNAMatch` shape.
-4. **Synthesized fields aren't biologically realistic.** A 3rd cousin to a Polish anchor might be Sub-Saharan African (random per pair seed). Production data won't have this issue but demos sometimes look odd. Possible v2: bias matched-user ancestry to share at least the anchor's primary population.
-5. **No state persistence across sessions.** Per-record merged/rejected decisions reset on page reload. Production needs server-side `DedupSuggestion` rows persisting state across sessions.
-6. **Performance ceiling at ~10K matches.** The last-name bucketing currently helps but pathological cases (e.g. 200+ "Smiths") would still be slow. Production should add a fallback to similarity-LSH or move dedup server-side as an async job.
-7. **No fuzzy-match across very different name spellings.** Could relax the 0.7 gate when segment overlap is >0.5 (high biological certainty even with name differences).
+1. **MyHeritage / low-segment-data vendors under-merge.** Records without segment positions can never auto-group in v2 because segment overlap is the confidence signal. Profiles that appear on multiple vendors but only have segments on one vendor will show as separate inbox entries. **Prod v2 should add a "Likely candidates" surface** that lists cM-bucketed candidates without segment data for manual user review.
+2. **Pairs >5% cM apart never group.** Same biological match across vendors with very different cM algorithms (e.g. 23andMe v3 vs Ancestry's reweighted estimates) can sit just outside ±5%. v2 could add a "loose" tier (±10–15%) requiring manual confirmation.
+3. **Distant-cousin matches under 30 cM are skipped entirely.** Below this threshold, hundreds of unrelated matches share similar cM and the false-positive chains overwhelm the signal. If users want to dedup these, a future "loose mode" toggle could lower the floor.
+4. **23andMe Migration Assistant is mock-only.** Currently disabled. The 4-step wizard structure is preserved in code but the upload/parse logic is a stub.
+5. **No real upload pipeline.** All data is preprocessed JSON. Production needs a CSV/ZIP ingestion endpoint that maps each vendor's export format to the `DNAMatch` shape.
+6. **Synthesized fields aren't biologically realistic.** A 3rd cousin to a Polish anchor might be Sub-Saharan African (random per pair seed). Production data won't have this issue but demos sometimes look odd. Possible v2: bias matched-user ancestry to share at least the anchor's primary population.
+7. **No state persistence across sessions.** Per-record merged/rejected decisions reset on page reload. Production needs server-side `DedupSuggestion` rows persisting state across sessions.
+8. **Performance ceiling at ~10K matches.** The cM sliding-window approach scales to ~10K easily. Beyond that, production should move dedup server-side as an async job.
 
 ---
 
@@ -277,7 +292,7 @@ The current TypeScript `DNAMatch` interface is the canonical wire shape. Product
 
 1. **Where does the dedup job run?** Sync API call? Async via existing worker tier? What's the current pattern for long-running per-user batch work in the Django app?
 2. **Real upload pipeline for the 23andMe Migration flow.** The TTAM closure already happened (Jan 2026); is migration capture still relevant? If so, what's the expected file format we should parse?
-3. **Phonetic / transliteration handling.** Production users with Cyrillic / Cyrillic-romanized names need fuzzy matching beyond Levenshtein. Worth the effort vs. defer?
+3. **Phonetic / transliteration handling — now obsolete?** v2 dropped name as a grouping signal entirely (segments + cM bracket are the only criteria). Cyrillic-romanisation and other name-divergence cases are no longer blockers — the engine groups them correctly via segments. The "Name varies" badge surfaces the divergence as context. Worth keeping name-similarity for the badge or remove `nameSimilarity()` entirely?
 4. **Cross-app shared user state.** Currently each app has its own `?user=` query param — switching apps loses context. Should there be a session-cookie that propagates across `*.vercel.app` subdomains and the production Django frontend?
 5. **`CrossVendorLink` field on `DNAMatchResults`.** Add it as a foreign key on the existing model, or keep the link in a separate table (current proposal)?
 6. **Dedup engine portability.** The TypeScript implementation is pure-functional and ports cleanly to Python — want me to mirror it in `app/dna_match/services/dedup.py`?

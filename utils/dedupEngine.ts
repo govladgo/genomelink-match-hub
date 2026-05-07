@@ -3,6 +3,22 @@
  *
  * Pure functions only — no React, no fetch, no localStorage. ES5-compat:
  * no `for...of` on iterators, no regex `s` flag, use Array.from + index loops.
+ *
+ * ALGORITHM (v2 — cM-bucketed)
+ * ============================
+ * Same biological match across two vendors should report:
+ *   1. Very similar shared cM (within ±5%, since vendors' cM calculators differ)
+ *   2. Substantially overlapping segment positions (same DNA segment ⇒ same person)
+ *
+ * Names are not used for grouping — users mistype them, vendors store them
+ * differently, and Cyrillic / non-Latin names get romanised inconsistently
+ * across platforms. Name similarity is still computed for UI display
+ * (so the card can surface "name varies across vendors") but does not
+ * influence whether a pair clears the threshold.
+ *
+ * Pairs below 30 cM are skipped entirely: at distant-cousin levels, hundreds
+ * of unrelated matches share similar cM, producing too many false-positive
+ * groups for any reasonable threshold to filter.
  */
 
 import { DNAMatch, Segment } from '@/data/types';
@@ -11,17 +27,20 @@ import { DNAMatch, Segment } from '@/data/types';
 // Public types
 // ---------------------------------------------------------------------------
 
-export type Signal = 'name' | 'cm' | 'segments';
+/** Signals that can contribute to a pair being grouped as duplicates. */
+export type Signal = 'cm' | 'segments';
 
 export interface PairScore {
   /** the lower-id match (sorted lexicographically for stable pair keys) */
   matchAId: string;
   matchBId: string;
-  /** raw similarity per signal (0-1) */
+  /** name similarity 0-1 — computed for UI display only, NOT in confidence math */
   nameSim: number;
+  /** cM closeness 0-1 — must clear the ±5% bucket to be considered */
   cmSim: number;
+  /** segment overlap 0-1 — the actual confidence value */
   segmentSim: number;
-  /** weighted total (0-1) */
+  /** weighted total (0-1) — currently equal to segmentSim */
   confidence: number;
   /** which signals contributed (>0) */
   basis: Signal[];
@@ -32,14 +51,52 @@ export interface DuplicateGroup {
   id: string;
   /** member match ids (≥ 2) */
   matchIds: string[];
-  /** average pair confidence across all pairs in the group */
+  /** average pair confidence (segment overlap) across all pairs in the group */
   confidence: number;
   /** combined basis across all pairs */
   basis: Signal[];
+  /** average shared cM across the group's members — used as the group label */
+  averageCM: number;
 }
 
 // ---------------------------------------------------------------------------
-// Levenshtein-based name similarity
+// Tunable thresholds (exported for tests & UI display)
+// ---------------------------------------------------------------------------
+
+/** Below this cM, dedup is skipped — too many same-cM unrelated matches. */
+export const MIN_CM_FOR_DEDUP = 30;
+
+/** Same biological match across vendors usually sits within ±5% cM. */
+export const CM_TOLERANCE = 0.05;
+
+/**
+ * Minimum segment overlap to count a pair as a candidate duplicate.
+ *
+ * Calibrated against the demo dataset: genuine cross-vendor duplicates
+ * (same person, slightly perturbed segment positions) score 0.8–0.99,
+ * while unrelated pairs that happen to share a cM bracket and partial
+ * segment overlap score 0.3–0.62. Setting the floor at 0.7 cleanly
+ * separates real duplicates from false-positive chains. Without this,
+ * union-find chains 4–7 distinct people into a single group when their
+ * partial overlaps daisy-chain.
+ */
+export const SEGMENT_OVERLAP_THRESHOLD = 0.7;
+
+/**
+ * Pairs at or above this overlap are eligible for "Merge all high-confidence".
+ * Real cross-vendor duplicates routinely hit 0.95+, so 0.9 is the right
+ * cutoff — bulk merging only the very-confidently-the-same-person groups.
+ */
+export const HIGH_CONFIDENCE_THRESHOLD = 0.9;
+
+/**
+ * @deprecated Use SEGMENT_OVERLAP_THRESHOLD. Kept for back-compat with
+ * any callers that imported the old name.
+ */
+export const SUGGEST_THRESHOLD = SEGMENT_OVERLAP_THRESHOLD;
+
+// ---------------------------------------------------------------------------
+// Levenshtein-based name similarity (display-only — not in confidence math)
 // ---------------------------------------------------------------------------
 
 /** Normalize a name: lowercase, collapse whitespace, strip punctuation. */
@@ -57,7 +114,6 @@ export function levenshtein(a: string, b: string): number {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
 
-  // Two-row DP for memory efficiency.
   let prev: number[] = new Array(b.length + 1);
   let curr: number[] = new Array(b.length + 1);
   for (let j = 0; j <= b.length; j++) prev[j] = j;
@@ -66,11 +122,7 @@ export function levenshtein(a: string, b: string): number {
     curr[0] = i;
     for (let j = 1; j <= b.length; j++) {
       const cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
-      curr[j] = Math.min(
-        curr[j - 1] + 1,        // insertion
-        prev[j] + 1,            // deletion
-        prev[j - 1] + cost      // substitution
-      );
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
     }
     const tmp = prev;
     prev = curr;
@@ -80,79 +132,40 @@ export function levenshtein(a: string, b: string): number {
 }
 
 /**
- * Token-aware name similarity for cross-vendor dedup. Returns 0-1.
+ * Display-only name similarity for the duplicate-group UI. Returns 0–1.
  *
- * Critical: this is a hard gate. Family members (siblings, cousins) share surnames
- * AND segments AND cM brackets, so name is the only reliable discriminator.
- * Different first names with the same surname → low similarity (0.4) regardless
- * of other shared structure.
+ * NOT used in dedup confidence math — name is no longer a signal because
+ * users mistype names and vendors store them inconsistently. The UI uses
+ * this to flag "name varies across vendors" as a context hint.
  */
 export function nameSimilarity(a: string, b: string): number {
   const na = normalizeName(a);
   const nb = normalizeName(b);
   if (na === nb) return 1;
   if (na.length === 0 || nb.length === 0) return 0;
-
-  const ta = na.split(' ');
-  const tb = nb.split(' ');
-  const lastA = ta[ta.length - 1];
-  const lastB = tb[tb.length - 1];
-  const firstA = ta[0];
-  const firstB = tb[0];
-
-  // Subset case (e.g., "Marta" in "Marta Bell" — one record gives only first name)
-  // Only trust if it's truly a single-token name being a prefix of the other.
-  if (ta.length === 1 && tb.length > 1 && tb.indexOf(na) !== -1) return 0.9;
-  if (tb.length === 1 && ta.length > 1 && ta.indexOf(nb) !== -1) return 0.9;
-
-  // Same last name → discriminator is the first name
-  if (lastA === lastB) {
-    // Initial-style match: one first name is 1–2 chars that prefix the other
-    if (firstA.length <= 2 && firstB.indexOf(firstA) === 0) return 0.95;
-    if (firstB.length <= 2 && firstA.indexOf(firstB) === 0) return 0.95;
-    // Full first names match exactly
-    if (firstA === firstB) return 1;
-    // First letters match → could be name variants or middle-name differences
-    if (firstA.charAt(0) === firstB.charAt(0)) {
-      const firstDist = levenshtein(firstA, firstB);
-      const firstLen = Math.max(firstA.length, firstB.length);
-      const sim = 1 - firstDist / firstLen;
-      // Map to 0.6–0.95 range so close-but-not-exact still passes the 0.7 threshold
-      return 0.6 + sim * 0.35;
-    }
-    // Same surname, different first letter → likely siblings/cousins, not duplicates
-    return 0.4;
-  }
-
-  // Different last names → fall back to global Levenshtein similarity but cap below 0.7
-  // so this branch alone cannot produce a duplicate suggestion.
   const dist = levenshtein(na, nb);
   const maxLen = Math.max(na.length, nb.length);
-  const sim = Math.max(0, 1 - dist / maxLen);
-  return Math.min(sim, 0.65);
+  return Math.max(0, 1 - dist / maxLen);
 }
 
 // ---------------------------------------------------------------------------
-// cM bracket similarity
+// cM closeness (binary: in-bucket or out)
 // ---------------------------------------------------------------------------
 
 /**
- * Same biological person on different vendors usually shows close-but-not-identical cM
- * because vendors use different chip versions and matching algorithms. We expect
- * variance in the ±5% range for the same person; ±15% is the upper edge of plausible.
+ * Returns 1 if both cM values fall within ±CM_TOLERANCE of each other, else 0.
+ * cM is the *bucket* key, not a continuous similarity signal.
  */
 export function cmSimilarity(cmA: number, cmB: number): number {
   if (cmA === cmB) return 1;
   const avg = (cmA + cmB) / 2;
   if (avg === 0) return 0;
   const deltaPct = Math.abs(cmA - cmB) / avg;
-
-  // Linear falloff: 0% diff → 1.0, 15% diff → 0.0
-  return Math.max(0, 1 - deltaPct / 0.15);
+  return deltaPct <= CM_TOLERANCE ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------
-// Segment overlap similarity
+// Segment overlap similarity (the confidence signal)
 // ---------------------------------------------------------------------------
 
 /** Returns the overlap length in base pairs between two segments on the same chromosome. */
@@ -164,8 +177,14 @@ function segmentOverlapBp(a: Segment, b: Segment): number {
 }
 
 /**
- * Segment overlap similarity: total overlap length / total combined length.
- * 0 if no overlapping segments. 1 if segment lists are identical.
+ * Segment overlap similarity: total overlap length / min(totalA, totalB).
+ *
+ * Returns 0 if either segment list is empty (no segments → no signal,
+ * pair cannot auto-merge in the new model).
+ *
+ * Uses the smaller side as denominator: if A is much shorter than B but
+ * is fully contained inside B's segments, that's still strong evidence
+ * the same DNA was inherited.
  */
 export function segmentSimilarity(segsA: Segment[], segsB: Segment[]): number {
   if (segsA.length === 0 || segsB.length === 0) return 0;
@@ -184,8 +203,6 @@ export function segmentSimilarity(segsA: Segment[], segsB: Segment[]): number {
     totalB += Math.max(0, segsB[j].endBp - segsB[j].startBp);
   }
 
-  // Use min of total lengths as denominator: if A has 50% overlap with B's segments,
-  // and A is much smaller, that's still a strong signal.
   const denom = Math.min(totalA, totalB);
   if (denom === 0) return 0;
   return Math.min(1, overlapSum / denom);
@@ -195,114 +212,88 @@ export function segmentSimilarity(segsA: Segment[], segsB: Segment[]): number {
 // Pair scoring
 // ---------------------------------------------------------------------------
 
-const WEIGHTS = { name: 0.3, cm: 0.3, segments: 0.4 };
-
 /**
- * Name is the primary discriminator across vendors — the same person should have
- * essentially the same name on different platforms. If nameSim falls below this
- * floor we treat the pair as different people regardless of cM/segment overlap
- * (which is naturally high for related family members across vendors).
+ * Score a single pair (a, b). Confidence equals segment overlap; the cM bucket
+ * is a binary precondition (returns 0 confidence if outside ±5%). Same vendor
+ * → 0 (cross-vendor dedup only).
+ *
+ * Pairs with no segment data on either side return confidence 0 — they
+ * cannot be auto-grouped without the biological signal.
  */
-const NAME_FLOOR = 0.7;
-
 export function scorePair(a: DNAMatch, b: DNAMatch): PairScore {
-  // Same vendor → not a cross-vendor duplicate (don't dedup within a single vendor)
   const sameVendor = a.source === b.source;
-
-  const nameSim = sameVendor ? 0 : nameSimilarity(a.name, b.name);
-  const cmSim = sameVendor ? 0 : cmSimilarity(a.sharedCM, b.sharedCM);
-  const segmentSim = sameVendor ? 0 : segmentSimilarity(a.segments, b.segments);
-
-  // Name is a hard gate: family members share surnames + segments + cM bracket,
-  // so without a strong name match we cannot conclude two records are the same person.
-  let confidence = 0;
-  if (nameSim < NAME_FLOOR) {
-    confidence = 0;
-  } else {
-    // Confidence = weighted sum of signals that have data.
-    // If one match has no segments, redistribute that weight to name+cm.
-    const hasSegments = a.segments.length > 0 && b.segments.length > 0;
-    if (hasSegments) {
-      confidence =
-        nameSim * WEIGHTS.name + cmSim * WEIGHTS.cm + segmentSim * WEIGHTS.segments;
-    } else {
-      const total = WEIGHTS.name + WEIGHTS.cm;
-      confidence = (nameSim * WEIGHTS.name + cmSim * WEIGHTS.cm) / total;
-    }
-  }
-
-  const basis: Signal[] = [];
-  if (nameSim > 0.5) basis.push('name');
-  if (cmSim > 0.5) basis.push('cm');
-  if (segmentSim > 0.3) basis.push('segments');
-
   // Sort match IDs lexicographically for stable pair identity
   const [aId, bId] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
 
-  return {
-    matchAId: aId,
-    matchBId: bId,
-    nameSim,
-    cmSim,
-    segmentSim,
-    confidence,
-    basis,
-  };
+  const nameSim = sameVendor ? 0 : nameSimilarity(a.name, b.name);
+
+  if (sameVendor || a.sharedCM < MIN_CM_FOR_DEDUP || b.sharedCM < MIN_CM_FOR_DEDUP) {
+    return { matchAId: aId, matchBId: bId, nameSim, cmSim: 0, segmentSim: 0, confidence: 0, basis: [] };
+  }
+
+  const cmSim = cmSimilarity(a.sharedCM, b.sharedCM);
+  if (cmSim === 0) {
+    return { matchAId: aId, matchBId: bId, nameSim, cmSim: 0, segmentSim: 0, confidence: 0, basis: [] };
+  }
+
+  const segmentSim = segmentSimilarity(a.segments, b.segments);
+  const confidence = segmentSim;
+
+  const basis: Signal[] = [];
+  if (cmSim > 0) basis.push('cm');
+  if (segmentSim >= SEGMENT_OVERLAP_THRESHOLD) basis.push('segments');
+
+  return { matchAId: aId, matchBId: bId, nameSim, cmSim, segmentSim, confidence, basis };
 }
 
 // ---------------------------------------------------------------------------
-// Group assembly via union-find
+// Group assembly: cM sliding window + segment-overlap confidence + union-find
 // ---------------------------------------------------------------------------
-
-/** Confidence threshold above which two matches are considered the same person. */
-export const SUGGEST_THRESHOLD = 0.7;
-export const HIGH_CONFIDENCE_THRESHOLD = 0.9;
 
 /**
  * Run dedup across all matches. Returns groups of 2+ matches that likely
  * represent the same person across vendors.
  *
- * Uses last-name bucketing to keep this fast at 1000+ matches: pairs that
- * don't share a last-name first character can never clear the 0.7 name
- * threshold (we made name a hard gate), so we only compare within buckets.
+ * Strategy (v2):
+ *   1. Filter to matches with sharedCM ≥ MIN_CM_FOR_DEDUP
+ *   2. Sort by sharedCM ascending
+ *   3. For each match A, walk forward through B until B.sharedCM > A.sharedCM × 1.05
+ *   4. Score each candidate pair on segment overlap
+ *   5. Union-find groups for pairs whose overlap ≥ SEGMENT_OVERLAP_THRESHOLD
  *
- * Without bucketing: O(n²) → 1500² = 2.25M compares
- * With bucketing:    O(n²/26) → ~85K compares  (~25× speedup)
+ * Performance: O(n log n) sort + O(n × avg_window). On the demo dataset
+ * (~1700 matches/user) this finishes well under 100ms.
  */
 export function findDuplicateGroups(
   matches: DNAMatch[],
-  threshold: number = SUGGEST_THRESHOLD
+  threshold: number = SEGMENT_OVERLAP_THRESHOLD
 ): DuplicateGroup[] {
-  // Bucket matches by normalized last-name first character.
-  // Pairs across buckets cannot share a last name, and our name gate requires
-  // exact-last-name match for high similarity — so cross-bucket pairs would
-  // hit the 0.65 cap or the 0.4 sibling-gate, both below the 0.7 threshold.
-  const nameBuckets: Record<string, DNAMatch[]> = {};
+  // 1. Filter + sort
+  const eligible: DNAMatch[] = [];
   for (let i = 0; i < matches.length; i++) {
-    const m = matches[i];
-    const tokens = normalizeName(m.name).split(' ');
-    const lastName = tokens[tokens.length - 1];
-    const bucketKey = lastName.charAt(0) || '_';
-    if (!nameBuckets[bucketKey]) nameBuckets[bucketKey] = [];
-    nameBuckets[bucketKey].push(m);
+    if (matches[i].sharedCM >= MIN_CM_FOR_DEDUP) eligible.push(matches[i]);
   }
+  eligible.sort((a, b) => a.sharedCM - b.sharedCM);
 
-  // Score within each bucket only
+  // 2. Sliding-window pair scoring
   const pairs: PairScore[] = [];
-  const nameBucketKeys = Object.keys(nameBuckets);
-  for (let b = 0; b < nameBucketKeys.length; b++) {
-    const bucket = nameBuckets[nameBucketKeys[b]];
-    for (let i = 0; i < bucket.length; i++) {
-      for (let j = i + 1; j < bucket.length; j++) {
-        const score = scorePair(bucket[i], bucket[j]);
-        if (score.confidence >= threshold) {
-          pairs.push(score);
-        }
+  for (let i = 0; i < eligible.length; i++) {
+    const a = eligible[i];
+    const upperBound = a.sharedCM * (1 + CM_TOLERANCE);
+    for (let j = i + 1; j < eligible.length; j++) {
+      const b = eligible[j];
+      if (b.sharedCM > upperBound) break; // out of bucket — sorted, so all further are too
+      // Verify the pair is symmetric in tolerance (a vs b's lower bound):
+      // since we sorted ascending, a.sharedCM ≤ b.sharedCM, so a sits inside
+      // b's window iff b.sharedCM ≤ a.sharedCM × 1.05 — which is our break.
+      const score = scorePair(a, b);
+      if (score.confidence >= threshold) {
+        pairs.push(score);
       }
     }
   }
 
-  // Union-find to assemble groups
+  // 3. Union-find to assemble groups
   const parent: Record<string, string> = {};
   function find(x: string): string {
     if (parent[x] === undefined) parent[x] = x;
@@ -315,12 +306,11 @@ export function findDuplicateGroups(
     const rb = find(b);
     if (ra !== rb) parent[ra] = rb;
   }
-
   for (let i = 0; i < pairs.length; i++) {
     union(pairs[i].matchAId, pairs[i].matchBId);
   }
 
-  // Bucket members by root
+  // 4. Bucket members by root
   const buckets: Record<string, string[]> = {};
   for (let i = 0; i < pairs.length; i++) {
     const root = find(pairs[i].matchAId);
@@ -329,7 +319,10 @@ export function findDuplicateGroups(
     if (buckets[root].indexOf(pairs[i].matchBId) === -1) buckets[root].push(pairs[i].matchBId);
   }
 
-  // Build groups with averaged confidence + combined basis
+  // 5. Build groups with averaged confidence + cM + combined basis
+  const matchById: Record<string, DNAMatch> = {};
+  for (let i = 0; i < matches.length; i++) matchById[matches[i].id] = matches[i];
+
   const rootKeys = Object.keys(buckets);
   const groups: DuplicateGroup[] = [];
   for (let k = 0; k < rootKeys.length; k++) {
@@ -353,12 +346,20 @@ export function findDuplicateGroups(
     }
     const avgConf = pairCount > 0 ? confSum / pairCount : 0;
 
+    let cmSum = 0;
+    for (let m = 0; m < memberIds.length; m++) {
+      const mm = matchById[memberIds[m]];
+      if (mm) cmSum += mm.sharedCM;
+    }
+    const averageCM = memberIds.length > 0 ? cmSum / memberIds.length : 0;
+
     const sortedIds = memberIds.slice().sort();
     groups.push({
       id: sortedIds.join('|'),
       matchIds: sortedIds,
       confidence: avgConf,
       basis: Object.keys(basisSet) as Signal[],
+      averageCM,
     });
   }
 

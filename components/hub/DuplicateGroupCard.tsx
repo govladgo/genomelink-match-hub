@@ -5,8 +5,7 @@ import { DuplicateGroup, Signal } from '@/utils/dedupEngine';
 import { VendorPill } from './VendorPill';
 
 const BASIS_LABELS: Record<Signal, string> = {
-  name: 'name',
-  cm: 'cM',
+  cm: 'cM bracket',
   segments: 'segments',
 };
 
@@ -47,11 +46,26 @@ export function DuplicateGroupCard({
   });
   const anyMerged = siblings.some(s => decisionState(s.id) === 'merged');
 
-  const groupLabel = primary.name;
+  // cM-led group label. averageCM is computed by the engine; format to 1 dp.
+  const cmLabel = `~${group.averageCM.toFixed(1)} cM`;
+  const memberCount = groupMatches.length;
+
+  // Distinct name spellings across members — surfaces "name varies across vendors"
+  // which is exactly the case the new (cM-based) logic was designed to handle.
+  const distinctNames = (() => {
+    const seen: string[] = [];
+    for (let i = 0; i < groupMatches.length; i++) {
+      const n = groupMatches[i].name;
+      if (seen.indexOf(n) === -1) seen.push(n);
+    }
+    return seen;
+  })();
+  const hasNameVariation = distinctNames.length > 1;
+
   const confidencePct = Math.round(group.confidence * 100);
   const confidenceColor =
-    group.confidence >= 0.9 ? 'var(--gl-color-positive)' :
-    group.confidence >= 0.75 ? 'var(--gl-color-yellow)' :
+    group.confidence >= 0.7 ? 'var(--gl-color-positive)' :
+    group.confidence >= 0.5 ? 'var(--gl-color-yellow)' :
     'var(--gl-color-text-muted)';
 
   return (
@@ -78,9 +92,26 @@ export function DuplicateGroupCard({
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--gl-color-primary-dark)' }}>
-                {groupLabel}
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--gl-color-primary-dark)' }}>
+                {cmLabel}
               </span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--gl-color-text-muted)' }}>
+                · {memberCount} candidates across vendors
+              </span>
+              {hasNameVariation && (
+                <span
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '1px 8px', borderRadius: 4,
+                    background: 'rgba(255, 124, 17, 0.10)',
+                    color: 'var(--gl-color-primary-attention)',
+                    fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+                  }}
+                  title="Names differ across vendors. Engine grouped by cM + segments, not name."
+                >
+                  Name varies
+                </span>
+              )}
               {allDecided && anyMerged && (
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -95,8 +126,20 @@ export function DuplicateGroupCard({
                 </span>
               )}
             </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--gl-color-text-muted)',
+                marginTop: 2,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {distinctNames.join(' · ')}
+            </div>
             <div style={{ fontSize: 11, color: 'var(--gl-color-text-muted)', marginTop: 2 }}>
-              {groupMatches.length} vendors · matched on {group.basis.map(b => BASIS_LABELS[b]).join(' + ')}
+              matched on {group.basis.map(b => BASIS_LABELS[b]).join(' + ')}
             </div>
           </div>
         </div>
@@ -224,6 +267,22 @@ function MemberRow({ match, state, onMerge, onReject, onUndo }: MemberRowProps) 
               }}
             >
               Primary
+            </span>
+          )}
+          {match.segments.length === 0 && (
+            <span
+              title="This vendor profile has no segment data; engine cannot auto-confirm a duplicate. Review manually."
+              style={{
+                fontSize: 10, fontWeight: 700,
+                color: 'var(--gl-color-text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                padding: '1px 6px',
+                borderRadius: 3,
+                background: 'rgba(120, 120, 120, 0.10)',
+              }}
+            >
+              No segments
             </span>
           )}
         </div>

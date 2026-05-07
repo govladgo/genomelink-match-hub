@@ -178,14 +178,14 @@ export default function MatchHubHelpPage() {
               </div>
               <div style={tocColumn}>
                 <div style={tocGroupTitle}>Duplicate detection</div>
-                <a href="#three-signals" style={tocLink}>
-                  The three signals
+                <a href="#how-grouped" style={tocLink}>
+                  How matches are grouped
                 </a>
                 <a href="#confidence" style={tocLink}>
                   Confidence levels
                 </a>
-                <a href="#name-gate" style={tocLink}>
-                  Why name is a hard gate
+                <a href="#why-cm" style={tocLink}>
+                  Why cM (not name) is the grouping key
                 </a>
                 <a href="#review-actions" style={tocLink}>
                   Reviewing groups: per-record decisions
@@ -263,43 +263,46 @@ export default function MatchHubHelpPage() {
             </p>
           </section>
 
-          {/* === Three signals === */}
-          <section id="three-signals" style={sectionGroup}>
-            <h3 style={h3Style}>The three signals</h3>
+          {/* === How matches are grouped === */}
+          <section id="how-grouped" style={sectionGroup}>
+            <h3 style={h3Style}>How matches are grouped</h3>
             <p style={bodyText}>
-              For every cross-vendor pair, the dedup engine computes three signals:
+              The engine groups potential duplicates by <strong>shared cM</strong> first and confirms with
+              <strong> segment overlap</strong>. Names are not used for grouping — they&apos;re shown for
+              context but a different name spelling never blocks a match.
             </p>
             <div style={{ overflowX: 'auto' }}>
               <table style={table}>
                 <thead>
                   <tr>
-                    <th style={th}>Signal</th>
+                    <th style={th}>Step</th>
                     <th style={th}>Computation</th>
-                    <th style={th}>Weight</th>
+                    <th style={th}>Role</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td style={td}>Name similarity</td>
-                    <td style={td}>Token-aware Levenshtein with last-name + first-initial logic</td>
-                    <td style={tdNum}>0.30</td>
+                    <td style={td}>cM bracket</td>
+                    <td style={td}>Both records&apos; shared cM within ±5% of each other; both ≥ 30 cM</td>
+                    <td style={tdNum}>Bucket key (binary)</td>
                   </tr>
                   <tr style={tdAlt}>
-                    <td style={td}>cM bracket</td>
-                    <td style={td}>Linear falloff over ±15% cM difference</td>
-                    <td style={tdNum}>0.30</td>
-                  </tr>
-                  <tr>
                     <td style={td}>Segment overlap</td>
                     <td style={td}>Total overlapping bp / min total bp of both</td>
-                    <td style={tdNum}>0.40</td>
+                    <td style={tdNum}>Confidence</td>
+                  </tr>
+                  <tr>
+                    <td style={td}>Name similarity</td>
+                    <td style={td}>Token-aware Levenshtein (display only)</td>
+                    <td style={tdNum}>Hint, not gate</td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <p style={bodyText}>
-              Confidence is the weighted sum, capped at 1.0. A score of 0.7 is the minimum to suggest a
-              merge; 0.9+ is high-confidence.
+              Group confidence equals the average segment overlap across pairs in the group. Pairs without
+              segment data on either side cannot be auto-grouped — they show up in the inbox as singletons
+              and need manual review.
             </p>
           </section>
 
@@ -309,33 +312,39 @@ export default function MatchHubHelpPage() {
             <ul style={unorderedList}>
               <li><strong>≥0.90</strong> — High confidence. Eligible for &ldquo;Merge all high-confidence&rdquo; bulk action.</li>
               <li><strong>0.70–0.89</strong> — Suggested. Review individually before merging.</li>
-              <li><strong>&lt;0.70</strong> — Not suggested. Pair is treated as different people.</li>
+              <li><strong>&lt;0.70</strong> — Filtered out. Pair is treated as different people; not shown.</li>
             </ul>
+            <p style={bodyText}>
+              Real cross-vendor duplicates routinely score 0.9+ because the same biological match has nearly
+              identical segment positions across platforms. Borderline scores (0.7–0.9) usually indicate one
+              vendor reporting fewer or differently-broken segments than the other.
+            </p>
           </section>
 
-          {/* === Name gate === */}
-          <section id="name-gate" style={sectionGroup}>
-            <h3 style={h3Style}>Why name is a hard gate</h3>
+          {/* === Why cM, not name === */}
+          <section id="why-cm" style={sectionGroup}>
+            <h3 style={h3Style}>Why cM (not name) is the grouping key</h3>
             <p style={bodyText}>
-              When name similarity is below 0.7, the pair is rejected outright — even if cM and segments
-              both look perfect. This protects against a common false-positive: <strong>family members
-              across vendors look like duplicates</strong>.
+              Names are unreliable across vendors. The same person commonly appears as
+              <em> Birgit Pettersen</em> on Ancestry, <em>B. Pettersen</em> on FTDNA, and
+              <em> Brigitte P.</em> on MyHeritage. Cyrillic and other non-Latin names get romanised
+              differently per vendor. Users mistype their own names on signup.
             </p>
 
-            <div style={warningCallout}>
-              <div style={calloutTitleWarning}>Why this matters</div>
+            <div style={tipCallout}>
+              <div style={calloutTitle}>The new model</div>
               <div>
-                Two siblings on different vendors share a similar cM bracket (sibling range) and segment
-                regions (because they inherited the same maternal/paternal blocks from your parents). Without
-                a hard name gate, they&apos;d merge as &ldquo;the same person across vendors&rdquo; — but they&apos;re actually
-                two different people who happen to be related to you in the same way.
+                The engine groups by <strong>cM bracket + segment overlap</strong>. If two records sit in
+                the same ±5% cM bucket and share substantial segment positions, they&apos;re very likely the
+                same biological person regardless of how their names were entered.
               </div>
             </div>
 
             <p style={bodyText}>
-              Subset names like &ldquo;Marta&rdquo; → &ldquo;Marta Bell&rdquo; and initials like &ldquo;M.&rdquo; → &ldquo;Michelle&rdquo; are explicitly
-              handled and pass the gate. Different first letters with the same surname (e.g. Alex Romanov
-              vs. Sarah Romanov) are explicitly rejected at 0.4 confidence.
+              When a group&apos;s members spell the name differently, the card header shows a small{' '}
+              <strong>&ldquo;Name varies&rdquo;</strong> badge to highlight the divergence. Family members
+              (siblings, cousins) inherit similar cM brackets but their segment positions differ — segment
+              overlap stays low for them, so they don&apos;t auto-group.
             </p>
           </section>
 
@@ -422,7 +431,10 @@ export default function MatchHubHelpPage() {
               <dd style={dd}>A DNA testing service (23andMe, Ancestry, FTDNA, MyHeritage, GEDmatch).</dd>
 
               <dt style={dt}>Confidence</dt>
-              <dd style={dd}>The dedup engine&apos;s 0–1 score for the likelihood that two cross-vendor records are the same biological person. ≥0.7 to suggest, ≥0.9 for high-confidence bulk merge.</dd>
+              <dd style={dd}>The dedup engine&apos;s 0–1 score equal to the average segment overlap across pairs in a group. ≥0.7 to suggest, ≥0.9 for high-confidence bulk merge. Pairs below 0.7 are filtered out (treated as different people).</dd>
+
+              <dt style={dt}>cM bracket</dt>
+              <dd style={dd}>The ±5% range around a shared cM value used to bucket potential duplicates. Two records must sit in the same cM bracket to be considered as candidates; segment overlap then confirms or rejects.</dd>
 
               <dt style={dt}>Primary record</dt>
               <dd style={dd}>The first record (lowest ID) in a duplicate group — the anchor. Sibling records get merged into the primary; the primary itself never has a merge button.</dd>
@@ -552,27 +564,6 @@ const calloutTitle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
   color: '#245FA4',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-};
-
-const warningCallout: React.CSSProperties = {
-  background: 'rgba(255, 124, 17, 0.1)',
-  border: '1px solid rgba(255, 124, 17, 0.6)',
-  borderRadius: 16,
-  padding: '12px 16px',
-  fontSize: 14,
-  color: '#263856',
-  lineHeight: '22px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const calloutTitleWarning: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 700,
-  color: '#d46a0e',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
 };
