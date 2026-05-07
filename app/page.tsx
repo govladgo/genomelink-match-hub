@@ -3,82 +3,140 @@
 /**
  * DNA Matches PRO — tools selector page.
  *
- * Five tool cards. Only the Match Hub card actually navigates; the others
- * (Network Graph, Clusters, DNA Painter, Family Tree) are visual-only
- * placeholders for the prototype, per product direction.
+ * Six tool cards. Only the Match Hub card actually navigates; the others
+ * (Network Graph, Clusters, Common Ancestor cM, DNA Painter, Family Tree)
+ * are visual-only placeholders.
  *
- * Figma: 11564:27120 (desktop) / 11564:27191 (mobile).
+ * Figma references:
+ *   12291:4738 (desktop) — 3-col grid at 1312, gap 32
+ *   12291:4764 (mobile)  — single column, cards 335 wide
+ *   12291:4756 (List|Tools sub-pill)
+ *   12291:4760-4763, 12291:5360, 12291:5377 (individual card variants)
  */
 
 import { GenomelinkHeader } from '@/components/layout/GenomelinkHeader';
 import { ToolCard } from '@/components/tools/ToolCard';
 
 // ----------------------------------------------------------------------------
-// Tool icons (inline SVG so we don't ship the Figma asset URLs)
+// Tool icons (lucide-style 18×18 stroke 1.5, currentColor)
 // ----------------------------------------------------------------------------
 
+// dataflow-02 — three nodes (top, bottom-left, bottom-right) connected
 const NetworkGraphIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <circle cx="3" cy="9" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="9" cy="3" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="15" cy="9" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="9" cy="15" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <path d="M5 9 L7 9 M11 9 L13 9 M9 5 L9 7 M9 11 L9 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="M4.5 7.5 L7.5 4.5 M10.5 4.5 L13.5 7.5 M4.5 10.5 L7.5 13.5 M13.5 10.5 L10.5 13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <rect x="6" y="1.5" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="1.5" y="12.5" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="10.5" y="12.5" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M9 5.5V9 M4.5 12.5V11a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
+// dataflow-03 — single top node + three bottom nodes
 const ClustersIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <circle cx="5" cy="5" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="13" cy="5" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="5" cy="13" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="13" cy="13" r="2" stroke="currentColor" strokeWidth="1.6" />
-    <path d="M7 5 L11 5 M5 7 L5 11 M13 7 L13 11 M7 13 L11 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <rect x="6" y="1.5" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="0.75" y="12.5" width="5" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="6.5" y="12.5" width="5" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="12.25" y="12.5" width="5" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <path
+      d="M9 5.5V9 M3.25 12.5V10.5a1 1 0 0 1 1-1h9.5a1 1 0 0 1 1 1v2 M9 9.5v3"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
+// users-01 — primary user + secondary user (lucide)
 const MatchHubIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <circle cx="7" cy="5" r="2.4" stroke="currentColor" strokeWidth="1.5" />
     <path
-      d="M3 4.5h6 M3 9h6 M3 13.5h6"
+      d="M2.25 15.75c0-2.62 2.13-4.75 4.75-4.75s4.75 2.13 4.75 4.75"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="1.5"
       strokeLinecap="round"
     />
-    <circle cx="13.5" cy="4.5" r="1.4" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="13.5" cy="9" r="1.4" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="13.5" cy="13.5" r="1.4" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M12 6.75a2 2 0 1 0 0-3.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <path
+      d="M13.5 15.75H16c0-2.07-1.43-3.81-3.36-4.32"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
   </svg>
 );
 
+// link-04 — vertical chain link
+const CommonAncestorIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <path
+      d="M11.25 6.75a2.5 2.5 0 0 1 0 3.54l-2.12 2.12a2.5 2.5 0 1 1-3.54-3.54l.7-.7"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M6.75 11.25a2.5 2.5 0 0 1 0-3.54l2.12-2.12a2.5 2.5 0 1 1 3.54 3.54l-.7.7"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// hugeicons:dna-01 — DNA helix
 const DnaPainterIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
     <path
-      d="M5 2 C 9 4 9 8 5 10 C 1 12 1 16 5 18 M13 18 C 9 16 9 12 13 10 C 17 8 17 4 13 2"
+      d="M5 1.5c0 3.5 8 4.5 8 8s-8 4.5-8 8 M13 1.5c0 3.5-8 4.5-8 8s8 4.5 8 8"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="1.5"
       strokeLinecap="round"
-      transform="translate(0,-1) scale(0.95)"
-      fill="none"
+    />
+    <path d="M6.5 4h5 M5.7 6.5h6.6 M5.7 11.5h6.6 M6.5 14h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+// dataflow-01 — three nodes vertically stacked with branching tree
+const FamilyTreeIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <rect x="6" y="1.5" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="1.5" y="12.5" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="10.5" y="12.5" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <path
+      d="M9 5.5V9 M4.5 12.5V11a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );
 
-const FamilyTreeIcon = () => (
+// list — three horizontal lines with leading dots (Figma 11842:23971)
+const ListIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <circle cx="9" cy="3.5" r="1.6" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="4" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="9" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.6" />
-    <circle cx="14" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.6" />
-    <path
-      d="M9 5 V7 M4 11 V8.5 H14 V11 M9 7 V11.5"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
+    <path d="M6 4.5h9.5 M6 9h9.5 M6 13.5h9.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <circle cx="3" cy="4.5" r="1" fill="currentColor" />
+    <circle cx="3" cy="9" r="1" fill="currentColor" />
+    <circle cx="3" cy="13.5" r="1" fill="currentColor" />
+  </svg>
+);
+
+// bar-chart-square-01 — bar chart inside rounded square
+const BarChartIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <rect x="2.25" y="2.25" width="13.5" height="13.5" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M6 12V8 M9 12V6 M12 12v-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 );
 
@@ -103,8 +161,9 @@ export default function ToolsPage() {
         }}
         className="tools-page-content"
       >
-        {/* Title row + visual-only List/Tools tab */}
+        {/* Title row + visual-only List/Tools tab — Figma 12291:4750 / 12291:4756 */}
         <div
+          className="tools-title-row"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -127,18 +186,20 @@ export default function ToolsPage() {
             >
               DNA Matches
             </h1>
+            {/* PRO badge: Figma 12291:4753 — w-66 p-8 gap-4 radius-8 */}
             <span
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                width: 66,
                 background: '#263856',
                 color: '#FFFFFF',
                 fontSize: 14,
                 fontWeight: 500,
                 lineHeight: '20px',
                 textTransform: 'uppercase',
-                padding: '8px',
+                padding: 8,
                 borderRadius: 8,
                 fontFamily: 'var(--gl-font)',
               }}
@@ -147,7 +208,7 @@ export default function ToolsPage() {
             </span>
           </div>
 
-          {/* Visual-only List | Tools sub-pill */}
+          {/* Visual-only List | Tools sub-pill — Figma 12291:4756 */}
           <div
             style={{
               display: 'flex',
@@ -157,39 +218,14 @@ export default function ToolsPage() {
               borderRadius: 16,
             }}
           >
-            <span
-              style={{
-                padding: '6px 24px',
-                borderRadius: 12,
-                fontSize: 14,
-                fontWeight: 600,
-                color: '#263856',
-                fontFamily: 'var(--gl-font)',
-                cursor: 'default',
-              }}
-            >
-              List
-            </span>
-            <span
-              style={{
-                padding: '6px 24px',
-                borderRadius: 12,
-                background: '#FFFFFF',
-                boxShadow: '0px 4px 5px rgba(74, 93, 128, 0.13)',
-                fontSize: 14,
-                fontWeight: 600,
-                color: '#263856',
-                fontFamily: 'var(--gl-font)',
-                cursor: 'default',
-              }}
-            >
-              Tools
-            </span>
+            <ListToolsTab active={false} icon={<ListIcon />} label="List" />
+            <ListToolsTab active={true} icon={<BarChartIcon />} label="Tools" />
           </div>
         </div>
 
-        {/* Card grid — flex-wrap so 3 fit at 1280, 2 below ~900, 1 on mobile */}
+        {/* Card grid — flex-wrap so 3 cols at 1312, 2 cols below, 1 on mobile */}
         <div
+          className="tools-grid"
           style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -219,6 +255,12 @@ export default function ToolsPage() {
             href="/match-hub"
           />
           <ToolCard
+            title="Common Ancestor cM"
+            description="Predict the most likely relationship behind a shared cM value, adjusted for population background, endogamy, and match context."
+            icon={<CommonAncestorIcon />}
+            comingSoon
+          />
+          <ToolCard
             title="DNA Painter"
             description="View your DNA matches on a chromosome map to identify shared genome segments with relatives and their parental origin."
             icon={<DnaPainterIcon />}
@@ -233,13 +275,73 @@ export default function ToolsPage() {
         </div>
 
         <style jsx>{`
+          /* Tablet: cards become single column wider once below 3-col threshold */
           @media (max-width: 900px) {
             :global(.tools-page-content) {
-              padding: 24px 16px 48px !important;
+              padding: 24px 20px 48px !important;
+              max-width: 100% !important;
+            }
+            :global(.tools-grid) {
+              gap: 16px !important;
+              flex-direction: column !important;
+            }
+            :global(.tools-grid > .tool-card) {
+              width: 100% !important;
+              max-width: 100% !important;
             }
           }
         `}</style>
       </div>
     </div>
+  );
+}
+
+// ============================================================================
+// List|Tools tab pill (Figma 12291:4757 / 12291:4758)
+// ============================================================================
+
+function ListToolsTab({
+  active,
+  icon,
+  label,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        padding: '6px 24px',
+        borderRadius: 12,
+        background: active ? '#FFFFFF' : 'transparent',
+        boxShadow: active ? '0px 4px 5px rgba(74, 93, 128, 0.13)' : 'none',
+        fontSize: 14,
+        fontWeight: 600,
+        lineHeight: '20px',
+        color: '#263856',
+        fontFamily: 'var(--gl-font)',
+        cursor: 'default',
+      }}
+    >
+      <span
+        style={{
+          width: 18,
+          height: 18,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#263856',
+        }}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      {label}
+    </span>
   );
 }

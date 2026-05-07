@@ -745,6 +745,59 @@ body {
 .vendor-pill--gedmatch  { background: rgba(242, 160, 61, 0.18); color: #b27418; }
 .vendor-pill--manual    { background: rgba(120, 120, 120, 0.10); color: #666; }
 .vendor-pill--other     { background: rgba(120, 120, 120, 0.10); color: #666; }
+
+/* Duplicate group card mobile — at narrow widths, the in-row member action
+   buttons (Dismiss / Merge / Undo) wrap to a new full-width row beneath the
+   identity column to stop the buttons from clipping vendor pills. */
+@media (max-width: 600px) {
+  .dup-member-row > div:first-child {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+  .dup-member-row > div:last-child {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    justify-content: flex-end !important;
+  }
+  .dup-member-row > div:last-child > button {
+    flex: 0 1 auto !important;
+    width: auto !important;
+    min-width: 100px !important;
+  }
+}
+
+/* Tool card mobile button — Figma 11842:19832 (Button/Mobile)
+   px-16 py-8, text-12 medium uppercase, arrow-next 16. Cards keep the same
+   white shell + 24-radius shadow at all widths; only the button shrinks. */
+@media (max-width: 600px) {
+  .tool-card {
+    padding: 16px !important;
+  }
+  .tool-card-btn {
+    padding: 8px 16px !important;
+    font-size: 12px !important;
+    line-height: 16px !important;
+  }
+  .tool-card-btn .tool-card-arrow {
+    width: 16px !important;
+    height: 16px !important;
+  }
+}
+
+/* Outlined variant — Figma 12292:24219: white bg, gray-semi border,
+   brand-color text. Used in in-row member rows of duplicate group cards. */
+.vendor-pill--outlined {
+  background: #FFFFFF !important;
+  border: 1px solid #C9D6E4;
+  padding: 2px 6px;
+}
+.vendor-pill--outlined.vendor-pill--23andme   { color: #d50f67; }
+.vendor-pill--outlined.vendor-pill--ancestry  { color: #9cbe30; }
+.vendor-pill--outlined.vendor-pill--myheritage{ color: #e56c30; }
+.vendor-pill--outlined.vendor-pill--ftdna     { color: #003D7A; }
+.vendor-pill--outlined.vendor-pill--gedmatch  { color: #f0a302; }
+.vendor-pill--outlined.vendor-pill--manual    { color: #263856; }
+.vendor-pill--outlined.vendor-pill--other     { color: #263856; }
 .duplicate-group {
   border: 1px solid var(--gl-color-border-light);
   border-radius: 10px;

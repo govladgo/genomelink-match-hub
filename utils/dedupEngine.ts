@@ -353,10 +353,37 @@ export function findDuplicateGroups(
     }
     const averageCM = memberIds.length > 0 ? cmSum / memberIds.length : 0;
 
-    const sortedIds = memberIds.slice().sort();
+    // Pick the primary record (anchor) by record quality, not by arbitrary id
+    // order. Order of preference:
+    //   1. Highest sharedCM — the record with the most reported DNA
+    //   2. Most segments    — richest segment data (drives confidence math)
+    //   3. Vendor preference — vendors that ship segment data win
+    //   4. Lowest id        — deterministic tie-breaker
+    // The primary then becomes matchIds[0]; remaining siblings are sorted by
+    // id so the rest of the group is stable across renders.
+    const VENDOR_RANK: Record<string, number> = {
+      ftdna: 0, myheritage: 1, gedmatch: 2, '23andme': 3, ancestry: 4,
+      manual: 5, other: 6,
+    };
+    const ranked = memberIds.slice().sort((aId, bId) => {
+      const a = matchById[aId];
+      const b = matchById[bId];
+      if (!a || !b) return aId < bId ? -1 : 1;
+      if (b.sharedCM !== a.sharedCM) return b.sharedCM - a.sharedCM;
+      const aSeg = a.segments.length, bSeg = b.segments.length;
+      if (bSeg !== aSeg) return bSeg - aSeg;
+      const aV = VENDOR_RANK[a.source] ?? 99;
+      const bV = VENDOR_RANK[b.source] ?? 99;
+      if (aV !== bV) return aV - bV;
+      return aId < bId ? -1 : 1;
+    });
+    const primaryId = ranked[0];
+    const siblingIds = ranked.slice(1).sort();
+    const orderedIds = [primaryId, ...siblingIds];
+
     groups.push({
-      id: sortedIds.join('|'),
-      matchIds: sortedIds,
+      id: orderedIds.slice().sort().join('|'),
+      matchIds: orderedIds,
       confidence: avgConf,
       basis: Object.keys(basisSet) as Signal[],
       averageCM,

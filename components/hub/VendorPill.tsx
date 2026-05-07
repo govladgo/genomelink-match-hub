@@ -5,7 +5,7 @@ const VENDOR_LABELS: Record<DNAMatch['source'], string> = {
   ancestry: 'Ancestry',
   ftdna: 'FTDNA',
   myheritage: 'MyHeritage',
-  gedmatch: 'GEDmatch',
+  gedmatch: 'GedMatch',
   manual: 'Manual',
   other: 'Other',
 };
@@ -13,13 +13,15 @@ const VENDOR_LABELS: Record<DNAMatch['source'], string> = {
 interface VendorPillProps {
   vendor: DNAMatch['source'];
   size?: 'sm' | 'md';
+  /** "outlined" matches Figma in-row provider chip (white bg, gray border). */
+  variant?: 'tinted' | 'outlined';
 }
 
-export function VendorPill({ vendor, size = 'md' }: VendorPillProps) {
+export function VendorPill({ vendor, size = 'md', variant = 'tinted' }: VendorPillProps) {
   return (
     <span
-      className={`vendor-pill vendor-pill--${vendor}`}
-      style={size === 'sm' ? { fontSize: 10, padding: '1px 6px' } : undefined}
+      className={`vendor-pill vendor-pill--${vendor}${variant === 'outlined' ? ' vendor-pill--outlined' : ''}`}
+      style={size === 'sm' ? { fontSize: 10, padding: '2px 6px', lineHeight: '14px' } : undefined}
     >
       {VENDOR_LABELS[vendor]}
     </span>

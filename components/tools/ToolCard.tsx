@@ -6,29 +6,24 @@ import React from 'react';
 /**
  * Tool card used on the / Tools selector page.
  *
- * Tokens (Figma 11842:15407 / 11842:19850):
+ * Tokens (Figma 11842:15407 / 11842:15412 desktop, 11842:19807 mobile):
  *   card        bg #FFFFFF, drop-shadow(0 5px 5px rgba(74,93,128,0.16)),
- *               radius 24, padding 32/24, width 416 (flex-wrappable)
+ *               radius 24, padding 24/32, width 416 desktop, 100% mobile
  *   title       18/26 SF Pro Semibold #263856 (60% opacity for coming-soon)
  *   body        14/20 SF Pro Regular #263856
- *   button      outline 1px rgba(38,56,86,0.6), padding 14/24, radius 32,
- *               uppercase Medium 14/20 #263856, with arrow-next 20px icon
+ *   button      Desktop: outline 1px rgba(38,56,86,0.6), padding 14/24,
+ *               radius 32, uppercase Medium 14/20 #263856 + arrow-next 20px
+ *               Mobile: padding 8/16, uppercase Medium 12/16 + arrow-next 16px
  *   coming-soon bg rgba(255,124,17,0.10), text #FF7C11 uppercase 12/18,
  *               padding 3/16, radius 6
  */
 
 interface ToolCardProps {
-  /** Title rendered next to the icon. */
   title: string;
-  /** Body description (1–2 sentences). */
   description: string;
-  /** Inline SVG icon at the start of the title row (18×18). */
   icon: React.ReactNode;
-  /** Button label, e.g. "Open network". */
   buttonLabel?: string;
-  /** Where the button navigates. */
   href?: string;
-  /** When true, render the "coming soon" badge and hide the button. */
   comingSoon?: boolean;
 }
 
@@ -54,8 +49,6 @@ export function ToolCard({
         gap: 24,
         flexShrink: 0,
         boxSizing: 'border-box',
-        // Default cards are auto-height; coming-soon cards omit the button row,
-        // so let height be content-driven for both.
       }}
       className="tool-card"
     >
@@ -132,11 +125,12 @@ export function ToolCard({
       {!comingSoon && buttonLabel && (
         <Link
           href={href || '#'}
+          className="tool-card-btn"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 2,
+            gap: 4,
             padding: '14px 24px',
             borderRadius: 32,
             border: '1px solid rgba(38, 56, 86, 0.6)',
@@ -159,17 +153,25 @@ export function ToolCard({
           }}
         >
           {buttonLabel}
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path
-              d="M8 5L13 10L8 15"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          {/* Arrow-next icon — Figma 5833:88401 (20×20 desktop, 16×16 mobile).
+              The chevron sits at the inset specified by the original asset. */}
+          <ArrowNextIcon />
         </Link>
       )}
     </div>
+  );
+}
+
+function ArrowNextIcon() {
+  return (
+    <svg className="tool-card-arrow" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M4.17 10h11.66 M11.67 5.83L15.83 10L11.67 14.17"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

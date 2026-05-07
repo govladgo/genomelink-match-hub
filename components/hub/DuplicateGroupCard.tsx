@@ -5,18 +5,39 @@ import { DuplicateGroup, Signal } from '@/utils/dedupEngine';
 import { VendorPill } from './VendorPill';
 
 const BASIS_LABELS: Record<Signal, string> = {
-  cm: 'cM bracket',
+  cm: 'cM',
   segments: 'segments',
 };
+
+/**
+ * Duplicate group card — Figma 12292:22608 / 12292:27476.
+ *
+ * Layout:
+ *   [card border 1px gray-60, radius 12, p-24, gap 16]
+ *   ┌─────────────────────────────────────────────────────────────┐
+ *   │  [48 avatar] Name, ~XX cM            [match%] [chevron]     │
+ *   │              N vendors · matched on …                       │
+ *   ├─────────────────────────────────────────────────────────────┤
+ *   │  [32 avatar] Name [vendor pill] [PRIMARY badge]             │
+ *   │              13.3 cM · 1 seg · 6th cousin                   │
+ *   ├─────────────────────────────────────────────────────────────┤
+ *   │  [32 avatar] Name [vendor pill]    [Dismiss] [Merge]        │
+ *   │              13.3 cM · 1 seg · 6th cousin                   │
+ *   └─────────────────────────────────────────────────────────────┘
+ *
+ * Sibling row backgrounds:
+ *   pending  → transparent
+ *   merged   → rgba(122,191,67,0.10) + MERGED green pill
+ *   rejected → rgba(201,214,228,0.10) + opacity 0.5 + line-through + NOT A
+ *              DUPLICATE gray pill
+ */
 
 type DecisionState = 'pending' | 'merged' | 'rejected' | 'primary';
 
 interface DuplicateGroupCardProps {
   group: DuplicateGroup;
   matches: DNAMatch[];
-  /** Per-record state lookup (driven by useDeduplication). */
   decisionState: (matchId: string) => DecisionState;
-  /** Per-record actions. */
   onMergeMatch: (matchId: string) => void;
   onRejectMatch: (matchId: string) => void;
   onUndoDecision: (matchId: string) => void;
@@ -35,169 +56,188 @@ export function DuplicateGroupCard({
 
   if (groupMatches.length === 0) return null;
 
-  // The first record by ID is the primary anchor for the group.
   const primary = groupMatches[0];
   const siblings = groupMatches.slice(1);
 
-  // A group is "fully resolved" when every sibling has a decision (merged or rejected).
-  const allDecided = siblings.every(s => {
-    const state = decisionState(s.id);
-    return state === 'merged' || state === 'rejected';
-  });
-  const anyMerged = siblings.some(s => decisionState(s.id) === 'merged');
+  // Distinct vendor count for the header line.
+  const vendorSet: Record<string, true> = {};
+  for (let i = 0; i < groupMatches.length; i++) vendorSet[groupMatches[i].source] = true;
+  const vendorCount = Object.keys(vendorSet).length;
 
-  // cM-led group label. averageCM is computed by the engine; format to 1 dp.
-  const cmLabel = `~${group.averageCM.toFixed(1)} cM`;
-  const memberCount = groupMatches.length;
-
-  // Distinct name spellings across members — surfaces "name varies across vendors"
-  // which is exactly the case the new (cM-based) logic was designed to handle.
-  const distinctNames = (() => {
-    const seen: string[] = [];
-    for (let i = 0; i < groupMatches.length; i++) {
-      const n = groupMatches[i].name;
-      if (seen.indexOf(n) === -1) seen.push(n);
-    }
-    return seen;
-  })();
+  // Distinct name spellings — surfaces "name varies across vendors", which is
+  // the case the cM-based dedup logic was designed to handle (vendors store
+  // names inconsistently — initials, transliteration, married names, etc).
+  const distinctNames: string[] = [];
+  for (let i = 0; i < groupMatches.length; i++) {
+    const n = groupMatches[i].name;
+    if (distinctNames.indexOf(n) === -1) distinctNames.push(n);
+  }
   const hasNameVariation = distinctNames.length > 1;
 
+  const cmLabel = `~${group.averageCM.toFixed(1)} cM`;
   const confidencePct = Math.round(group.confidence * 100);
-  const confidenceColor =
-    group.confidence >= 0.7 ? 'var(--gl-color-positive)' :
-    group.confidence >= 0.5 ? 'var(--gl-color-yellow)' :
-    'var(--gl-color-text-muted)';
+
+  // Subtitle was previously "N vendors · matched on cM + segments" — Figma
+  // 12327:2058 simplifies it to just "N vendors". Keeping `basisLabel` for
+  // the tooltip / accessibility hint so the cM-based grouping is still
+  // discoverable when needed.
+  const basisLabel = group.basis.length
+    ? group.basis.map(b => BASIS_LABELS[b]).join(' + ')
+    : 'cM';
 
   return (
-    <div className={`duplicate-group${allDecided && anyMerged ? ' duplicate-group--merged' : ''}`}>
-      {/* Header row */}
+    <div
+      style={{
+        background: '#FFFFFF',
+        border: '1px solid rgba(201, 214, 228, 0.6)',
+        borderRadius: 12,
+        padding: 24,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header row — Figma 12327:2058: no avatar, cM-led title +
+          "N vendors" subtitle, % confidence + chevron on the right. */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
+          gap: 16,
+          padding: '8px 0',
           cursor: 'pointer',
         }}
         onClick={() => setExpanded(!expanded)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-          <span style={{
-            width: 36, height: 36, borderRadius: '50%',
-            background: primary.avatarColor, color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 600, flexShrink: 0,
-          }}>
-            {primary.initials}
-          </span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--gl-color-primary-dark)' }}>
-                {cmLabel}
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--gl-color-text-muted)' }}>
-                · {memberCount} candidates across vendors
-              </span>
-              {hasNameVariation && (
-                <span
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    padding: '1px 8px', borderRadius: 4,
-                    background: 'rgba(255, 124, 17, 0.10)',
-                    color: 'var(--gl-color-primary-attention)',
-                    fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-                  }}
-                  title="Names differ across vendors. Engine grouped by cM + segments, not name."
-                >
-                  Name varies
-                </span>
-              )}
-              {allDecided && anyMerged && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '1px 8px', borderRadius: 4,
-                  background: 'var(--gl-color-positive)', color: '#fff',
-                  fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-                }}>
-                  <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
-                    <path d="M3 7L6 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Resolved
-                </span>
-              )}
-            </div>
-            <div
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
+            <p
               style={{
-                fontSize: 11,
-                color: 'var(--gl-color-text-muted)',
-                marginTop: 2,
+                margin: 0,
+                fontSize: 16,
+                fontWeight: 600,
+                lineHeight: '24px',
+                color: '#263856',
+                fontFamily: 'var(--gl-font)',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
+                maxWidth: '100%',
               }}
+              title={hasNameVariation ? distinctNames.join(' · ') : primary.name}
             >
-              {distinctNames.join(' · ')}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--gl-color-text-muted)', marginTop: 2 }}>
-              matched on {group.basis.map(b => BASIS_LABELS[b]).join(' + ')}
-            </div>
+              {/* Title is always cM-led to make it visible that grouping is
+                  cM-based, not name-based. Names are surfaced in the per-row
+                  list below; if vendors disagree on the name, a "Name varies"
+                  badge sits next to the title. */}
+              {`${cmLabel} · ${groupMatches.length} candidates`}
+            </p>
+            {hasNameVariation && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  background: 'rgba(255, 124, 17, 0.10)',
+                  color: '#FF7C11',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  lineHeight: '14px',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                  fontFamily: 'var(--gl-font)',
+                }}
+                title="Names differ across vendors — grouped by cM + segments, not name."
+              >
+                Name varies
+              </span>
+            )}
           </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <span style={{
-            fontSize: 12, fontWeight: 600,
-            color: confidenceColor,
-            minWidth: 36, textAlign: 'right',
-          }}>
-            {confidencePct}%
-          </span>
-          <svg
-            width="14" height="14" viewBox="0 0 14 14" fill="none"
-            style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}
+          <p
+            style={{
+              margin: 0,
+              fontSize: 16,
+              fontWeight: 400,
+              lineHeight: '24px',
+              color: '#6786AC',
+              fontFamily: 'var(--gl-font)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+            title={`Grouped by ${basisLabel}`}
           >
-            <path d="M3 5L7 9L11 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+            {vendorCount} vendors
+          </p>
         </div>
+        <span
+          style={{
+            fontSize: 16,
+            fontWeight: 600,
+            lineHeight: '24px',
+            color: '#263856',
+            fontFamily: 'var(--gl-font)',
+            flexShrink: 0,
+          }}
+        >
+          {confidencePct}%
+        </span>
+        <svg
+          width="24" height="24" viewBox="0 0 24 24" fill="none"
+          style={{
+            transform: expanded ? 'rotate(0)' : 'rotate(180deg)',
+            transition: 'transform 0.2s',
+            flexShrink: 0,
+            color: '#263856',
+          }}
+          aria-hidden="true"
+        >
+          <path d="M6 15L12 9L18 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
 
-      {/* Member rows */}
       {expanded && (
-        <div style={{
-          marginTop: 12,
-          paddingTop: 12,
-          borderTop: '1px solid var(--gl-color-border-light)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-        }}>
-          {/* Primary row — anchor, no actions */}
-          <MemberRow
-            match={primary}
-            state="primary"
-            onMerge={() => {}}
-            onReject={() => {}}
-            onUndo={() => {}}
-          />
-          {/* Sibling rows — each has its own merge / not-a-duplicate decision */}
-          {siblings.map(s => (
+        <>
+          {/* Divider */}
+          <div style={{ height: 1, background: 'rgba(201, 214, 228, 0.6)', width: '100%' }} />
+
+          {/* Member rows */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <MemberRow
-              key={s.id}
-              match={s}
-              state={decisionState(s.id)}
-              onMerge={(e) => { e.stopPropagation(); onMergeMatch(s.id); }}
-              onReject={(e) => { e.stopPropagation(); onRejectMatch(s.id); }}
-              onUndo={(e) => { e.stopPropagation(); onUndoDecision(s.id); }}
+              match={primary}
+              state="primary"
+              onMerge={() => {}}
+              onReject={() => {}}
+              onUndo={() => {}}
             />
-          ))}
-        </div>
+            {siblings.map(s => (
+              <MemberRow
+                key={s.id}
+                match={s}
+                state={decisionState(s.id)}
+                onMerge={(e) => { e.stopPropagation(); onMergeMatch(s.id); }}
+                onReject={(e) => { e.stopPropagation(); onRejectMatch(s.id); }}
+                onUndo={(e) => { e.stopPropagation(); onUndoDecision(s.id); }}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
 // ============================================================================
-// Per-record row with inline actions
+// Per-record row
 // ============================================================================
 
 interface MemberRowProps {
@@ -213,163 +253,195 @@ function MemberRow({ match, state, onMerge, onReject, onUndo }: MemberRowProps) 
   const isMerged = state === 'merged';
   const isRejected = state === 'rejected';
 
+  const rowBg =
+    isMerged ? 'rgba(122, 191, 67, 0.10)' :
+    isRejected ? 'rgba(201, 214, 228, 0.10)' :
+    'transparent';
+
+  // The Figma applies opacity:0.5 to the identity column for "not a duplicate"
+  // rows (with the action buttons remaining at full opacity).
+  const identityOpacity = isRejected ? 0.5 : 1;
+
   return (
     <div
+      className="dup-member-row"
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '8px 10px',
+        gap: 16,
+        padding: 8,
         borderRadius: 8,
-        background:
-          isMerged ? 'rgba(122, 191, 67, 0.06)' :
-          isRejected ? 'rgba(120, 120, 120, 0.04)' :
-          'transparent',
-        opacity: isRejected ? 0.6 : 1,
-        transition: 'background 0.15s, opacity 0.15s',
+        background: rowBg,
+        transition: 'background 0.15s',
+        flexWrap: 'wrap',
       }}
     >
-      {/* Avatar */}
-      <span
+      <div
         style={{
-          width: 28, height: 28, borderRadius: '50%',
-          background: match.avatarColor, color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, fontWeight: 700, flexShrink: 0,
+          flex: '1 0 0',
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          opacity: identityOpacity,
         }}
       >
-        {match.initials}
-      </span>
-
-      {/* Identity */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span
+        <span
+          style={{
+            width: 32, height: 32, borderRadius: '50%',
+            background: match.avatarColor, color: '#FFFFFF',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 600, flexShrink: 0,
+            fontFamily: 'var(--gl-font)',
+          }}
+        >
+          {match.initials}
+        </span>
+        <div style={{ flex: '1 0 0', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                lineHeight: '20px',
+                color: '#263856',
+                fontFamily: 'var(--gl-font)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                textDecoration: isRejected ? 'line-through' : 'none',
+              }}
+            >
+              {match.name}
+            </span>
+            <VendorPill vendor={match.source} size="sm" variant="outlined" />
+            {isPrimary && <StatusPill label="Primary" tone="primary" />}
+            {isMerged && <StatusPill label="Merged" tone="merged" />}
+            {isRejected && <StatusPill label="Not a duplicate" tone="rejected" />}
+          </div>
+          <p
             style={{
-              fontSize: 13, fontWeight: 600,
-              color: 'var(--gl-color-primary-dark)',
-              textDecoration: isRejected ? 'line-through' : 'none',
+              margin: 0,
+              marginTop: 0,
+              fontSize: 14,
+              fontWeight: 400,
+              lineHeight: '20px',
+              color: '#6786AC',
+              fontFamily: 'var(--gl-font)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
-            {match.name}
-          </span>
-          <VendorPill vendor={match.source} size="sm" />
-          {isPrimary && (
-            <span
-              style={{
-                fontSize: 10, fontWeight: 700,
-                color: 'var(--gl-color-secondary)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                padding: '1px 6px',
-                borderRadius: 3,
-                background: 'rgba(69, 130, 201, 0.10)',
-              }}
-            >
-              Primary
-            </span>
-          )}
-          {match.segments.length === 0 && (
-            <span
-              title="This vendor profile has no segment data; engine cannot auto-confirm a duplicate. Review manually."
-              style={{
-                fontSize: 10, fontWeight: 700,
-                color: 'var(--gl-color-text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                padding: '1px 6px',
-                borderRadius: 3,
-                background: 'rgba(120, 120, 120, 0.10)',
-              }}
-            >
-              No segments
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--gl-color-text-muted)', marginTop: 2 }}>
-          {match.sharedCM} cM · {match.segments.length} seg · {match.relationship}
+            {match.sharedCM} cM · {match.segments.length} seg · {match.relationship}
+          </p>
         </div>
       </div>
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        {isPrimary ? null : isMerged ? (
-          <DecisionStatusPill
-            label="Merged"
-            tone="positive"
-            onUndo={onUndo}
-          />
-        ) : isRejected ? (
-          <DecisionStatusPill
-            label="Not a duplicate"
-            tone="muted"
-            onUndo={onUndo}
-          />
-        ) : (
-          <>
+      {!isPrimary && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {isMerged || isRejected ? (
             <button
-              onClick={onMerge}
-              className="gl-btn gl-btn--primary"
-              style={{ padding: '5px 12px', fontSize: 11, whiteSpace: 'nowrap' }}
+              onClick={onUndo}
+              style={btnSecondary}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(38, 56, 86, 0.04)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              Merge
+              Undo
             </button>
-            <button
-              onClick={onReject}
-              className="gl-btn gl-btn--secondary"
-              style={{ padding: '5px 12px', fontSize: 11, whiteSpace: 'nowrap' }}
-            >
-              Not a duplicate
-            </button>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              <button
+                onClick={onReject}
+                style={btnSecondary}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(38, 56, 86, 0.04)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={onMerge}
+                style={btnPrimary}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f2690b'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = '#FF7C11'; }}
+              >
+                Merge
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 // ============================================================================
-// Status pill shown after a decision is made (with Undo)
+// Status pill (PRIMARY / MERGED / NOT A DUPLICATE)
 // ============================================================================
 
-interface DecisionStatusPillProps {
-  label: string;
-  tone: 'positive' | 'muted';
-  onUndo: (e: React.MouseEvent) => void;
-}
+type PillTone = 'primary' | 'merged' | 'rejected';
 
-function DecisionStatusPill({ label, tone, onUndo }: DecisionStatusPillProps) {
+function StatusPill({ label, tone }: { label: string; tone: PillTone }) {
+  const styles =
+    tone === 'primary'  ? { bg: 'rgba(255, 124, 17, 0.10)', fg: '#FF7C11' } :
+    tone === 'merged'   ? { bg: 'rgba(122, 191, 67, 0.10)', fg: '#5EA634' } :
+                          { bg: 'rgba(201, 214, 228, 0.6)', fg: '#263856' };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          padding: '3px 8px', borderRadius: 4,
-          fontSize: 11, fontWeight: 600,
-          background: tone === 'positive' ? 'rgba(122, 191, 67, 0.15)' : 'rgba(120, 120, 120, 0.10)',
-          color: tone === 'positive' ? 'var(--gl-color-positive)' : 'var(--gl-color-text-muted)',
-        }}
-      >
-        {tone === 'positive' && (
-          <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
-            <path d="M3 7L6 10L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-        {label}
-      </span>
-      <button
-        onClick={onUndo}
-        style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: 11, fontWeight: 600,
-          color: 'var(--gl-color-secondary)',
-          textDecoration: 'underline',
-          padding: 0,
-          fontFamily: 'var(--gl-font)',
-        }}
-      >
-        Undo
-      </button>
-    </div>
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2px 8px',
+        borderRadius: 4,
+        background: styles.bg,
+        color: styles.fg,
+        fontSize: 10,
+        fontWeight: 600,
+        lineHeight: '14px',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+        fontFamily: 'var(--gl-font)',
+      }}
+    >
+      {label}
+    </span>
   );
 }
+
+// ----------------------------------------------------------------------------
+// Button styles (Figma 12247:13593 + 12247:13594 / 12247:19506)
+// ----------------------------------------------------------------------------
+
+const btnBase: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 2,
+  padding: '8px 16px',
+  borderRadius: 32,
+  fontSize: 12,
+  fontWeight: 500,
+  lineHeight: '16px',
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  width: 120,
+  fontFamily: 'var(--gl-font)',
+  transition: 'background 0.15s, border-color 0.15s',
+};
+
+const btnSecondary: React.CSSProperties = {
+  ...btnBase,
+  background: 'transparent',
+  border: '1px solid rgba(38, 56, 86, 0.6)',
+  color: '#263856',
+};
+
+const btnPrimary: React.CSSProperties = {
+  ...btnBase,
+  background: '#FF7C11',
+  border: '1px solid transparent',
+  color: '#FFFFFF',
+};
