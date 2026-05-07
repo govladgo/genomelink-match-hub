@@ -64,7 +64,7 @@ export default function MatchHubHelpPage() {
           }}
         >
           <button
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/match-hub')}
             style={{
               position: 'absolute',
               left: 0,
@@ -450,7 +450,7 @@ export default function MatchHubHelpPage() {
           {/* === CTA === */}
           <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-start' }}>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/match-hub')}
               style={{
                 padding: '12px 28px',
                 borderRadius: 32,

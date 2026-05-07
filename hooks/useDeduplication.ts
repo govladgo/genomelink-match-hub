@@ -31,6 +31,8 @@ interface UseDedupResult {
   mergedAwayMatchIds: Set<string>;
   /** Groups that still have at least one undecided sibling record. */
   pendingGroups: DuplicateGroup[];
+  /** Groups where every sibling has a decision (merged or rejected). */
+  assessedGroups: DuplicateGroup[];
   /** Number of high-confidence pending sibling decisions remaining. */
   highConfidenceCount: number;
 
@@ -176,6 +178,19 @@ export function useDeduplication(matches: DNAMatch[]): UseDedupResult {
     });
   }, [groups, mergedMatchIds, rejectedMatchIds]);
 
+  // A group is "assessed" when every sibling has a decision (merged or rejected).
+  const assessedGroups = useMemo(() => {
+    return groups.filter(g => {
+      // Must have at least one sibling beyond the primary
+      if (g.matchIds.length < 2) return false;
+      for (let j = 1; j < g.matchIds.length; j++) {
+        const id = g.matchIds[j];
+        if (!mergedMatchIds.has(id) && !rejectedMatchIds.has(id)) return false;
+      }
+      return true;
+    });
+  }, [groups, mergedMatchIds, rejectedMatchIds]);
+
   // Count of pending sibling decisions inside high-confidence groups.
   const highConfidenceCount = useMemo(() => {
     let count = 0;
@@ -196,6 +211,7 @@ export function useDeduplication(matches: DNAMatch[]): UseDedupResult {
     rejectedMatchIds,
     mergedAwayMatchIds,
     pendingGroups,
+    assessedGroups,
     highConfidenceCount,
     isPrimaryMatchId,
     groupForMatchId,

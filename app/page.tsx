@@ -1,482 +1,245 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-// 23andMe Migration feature hidden — re-enable by uncommenting below + the
-// <Link>...</Link> block in the header further down + restoring the body of
-// app/migrate/page.tsx
-// import Link from 'next/link';
-import { DNAMatch } from '@/data/types';
-import { useDeduplication } from '@/hooks/useDeduplication';
-import { VendorFilterBar } from '@/components/hub/VendorFilterBar';
-import { MatchRow } from '@/components/hub/MatchRow';
-import { DuplicateGroupCard } from '@/components/hub/DuplicateGroupCard';
-import { UserSwitcher } from '@/components/UserSwitcher';
-import {
-  loadUserIndex, loadUserDataset,
-  getSelectedUserIdFromUrl, setSelectedUserIdInUrl,
-} from '@/data/adapters/realData';
+/**
+ * DNA Matches PRO — tools selector page.
+ *
+ * Five tool cards. Only the Match Hub card actually navigates; the others
+ * (Network Graph, Clusters, DNA Painter, Family Tree) are visual-only
+ * placeholders for the prototype, per product direction.
+ *
+ * Figma: 11564:27120 (desktop) / 11564:27191 (mobile).
+ */
 
-const ALL_VENDORS: DNAMatch['source'][] = [
-  '23andme', 'ancestry', 'ftdna', 'myheritage', 'gedmatch',
-];
+import { GenomelinkHeader } from '@/components/layout/GenomelinkHeader';
+import { ToolCard } from '@/components/tools/ToolCard';
 
-type Tab = 'inbox' | 'duplicates';
+// ----------------------------------------------------------------------------
+// Tool icons (inline SVG so we don't ship the Figma asset URLs)
+// ----------------------------------------------------------------------------
 
-interface IndexEntry {
-  id: string;
-  displayName: string;
-  initials: string;
-  avatarColor: string;
-  primaryPopulation: string;
-  matchCount: number;
-}
+const NetworkGraphIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <circle cx="3" cy="9" r="2" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="9" cy="3" r="2" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="15" cy="9" r="2" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="9" cy="15" r="2" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M5 9 L7 9 M11 9 L13 9 M9 5 L9 7 M9 11 L9 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M4.5 7.5 L7.5 4.5 M10.5 4.5 L13.5 7.5 M4.5 10.5 L7.5 13.5 M13.5 10.5 L10.5 13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
 
-export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<Tab>('inbox');
-  const [selectedVendors, setSelectedVendors] = useState<Set<DNAMatch['source']>>(
-    new Set(ALL_VENDORS)
-  );
+const ClustersIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <circle cx="5" cy="5" r="2" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="13" cy="5" r="2" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="5" cy="13" r="2" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="13" cy="13" r="2" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M7 5 L11 5 M5 7 L5 11 M13 7 L13 11 M7 13 L11 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
 
-  // User selection + data loading
-  const [userIndex, setUserIndex] = useState<IndexEntry[]>([]);
-  const [activeUserId, setActiveUserId] = useState<string>('user-1');
-  const [matches, setMatches] = useState<DNAMatch[]>([]);
-  const [loading, setLoading] = useState(true);
+const MatchHubIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <path
+      d="M3 4.5h6 M3 9h6 M3 13.5h6"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+    <circle cx="13.5" cy="4.5" r="1.4" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="13.5" cy="9" r="1.4" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="13.5" cy="13.5" r="1.4" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
+);
 
-  // Load index on mount, then load the active user's data
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const index = await loadUserIndex();
-        if (cancelled) return;
-        setUserIndex(index);
-        const initialId = getSelectedUserIdFromUrl();
-        const validId = index.find((u) => u.id === initialId) ? initialId : index[0]?.id;
-        if (validId) {
-          setActiveUserId(validId);
-          const ds = await loadUserDataset(validId);
-          if (!cancelled) {
-            setMatches(ds.matches);
-            setLoading(false);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load user data:', err);
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+const DnaPainterIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <path
+      d="M5 2 C 9 4 9 8 5 10 C 1 12 1 16 5 18 M13 18 C 9 16 9 12 13 10 C 17 8 17 4 13 2"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      transform="translate(0,-1) scale(0.95)"
+      fill="none"
+    />
+  </svg>
+);
 
-  const handleSelectUser = async (userId: string) => {
-    setLoading(true);
-    setActiveUserId(userId);
-    setSelectedUserIdInUrl(userId);
-    try {
-      const ds = await loadUserDataset(userId);
-      setMatches(ds.matches);
-    } catch (err) {
-      console.error('Failed to load user data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+const FamilyTreeIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <circle cx="9" cy="3.5" r="1.6" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="4" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="9" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="14" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M9 5 V7 M4 11 V8.5 H14 V11 M9 7 V11.5"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+);
 
-  const {
-    groups, mergedMatchIds, rejectedMatchIds, mergedAwayMatchIds,
-    pendingGroups, highConfidenceCount,
-    matchDecisionState,
-    mergeMatch, rejectMatch, undoDecision,
-    mergeAllHighConfidence, reset,
-  } = useDeduplication(matches);
+// ----------------------------------------------------------------------------
 
-  const vendorCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (let i = 0; i < matches.length; i++) {
-      counts[matches[i].source] = (counts[matches[i].source] || 0) + 1;
-    }
-    return counts;
-  }, [matches]);
-
-  // Inbox: all matches except those merged into another (the secondary entries of merged groups)
-  const inboxMatches = useMemo(() => {
-    return matches.filter(m =>
-      selectedVendors.has(m.source) && !mergedAwayMatchIds.has(m.id)
-    );
-  }, [matches, selectedVendors, mergedAwayMatchIds]);
-
-  const toggleVendor = (vendor: DNAMatch['source']) => {
-    setSelectedVendors(prev => {
-      const next = new Set(prev);
-      if (next.has(vendor)) {
-        next.delete(vendor);
-      } else {
-        next.add(vendor);
-      }
-      return next;
-    });
-  };
-
-  // Show every group that contains any decision (merged or rejected) OR is still pending.
-  // Groups whose siblings are ALL still untouched and groups that are fully resolved both
-  // appear; we just sort fully-resolved groups to the bottom so the work-to-do is on top.
-  const allGroupsForReview = useMemo(() => {
-    const annotated = groups.map(g => {
-      const siblingStates = g.matchIds.slice(1).map(id => matchDecisionState(id));
-      const hasPending = siblingStates.some(s => s === 'pending');
-      const hasDecision = siblingStates.some(s => s === 'merged' || s === 'rejected');
-      return { group: g, hasPending, hasDecision };
-    });
-    // Pending groups first (preserving confidence order from the engine), then resolved groups.
-    return [
-      ...annotated.filter(a => a.hasPending).map(a => a.group),
-      ...annotated.filter(a => !a.hasPending && a.hasDecision).map(a => a.group),
-    ];
-  }, [groups, matchDecisionState]);
-
+export default function ToolsPage() {
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'var(--gl-color-bg)',
-      fontFamily: 'var(--gl-font)',
-    }}>
-      {/* Header */}
-      <header style={{
-        background: 'var(--gl-color-surface)',
-        borderBottom: '1px solid var(--gl-color-border-light)',
-        padding: '16px 24px',
-      }}>
-        <div style={{ maxWidth: 880, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--gl-color-primary-dark)' }}>
-              Match Hub
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#F9FCFF',
+        fontFamily: 'var(--gl-font)',
+      }}
+    >
+      <GenomelinkHeader />
+
+      <div
+        style={{
+          maxWidth: 1312,
+          margin: '0 auto',
+          padding: '32px 64px 64px',
+        }}
+        className="tools-page-content"
+      >
+        {/* Title row + visual-only List/Tools tab */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+            marginBottom: 24,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 32,
+                fontWeight: 600,
+                lineHeight: '36px',
+                color: '#263856',
+                fontFamily: 'var(--gl-font)',
+              }}
+            >
+              DNA Matches
             </h1>
-            <p style={{ fontSize: 13, color: 'var(--gl-color-text-muted)', margin: '2px 0 0' }}>
-              Unified cross-vendor DNA match inbox
-            </p>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#263856',
+                color: '#FFFFFF',
+                fontSize: 14,
+                fontWeight: 500,
+                lineHeight: '20px',
+                textTransform: 'uppercase',
+                padding: '8px',
+                borderRadius: 8,
+                fontFamily: 'var(--gl-font)',
+              }}
+            >
+              PRO
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <a
-              href="/help"
-              className="gl-btn gl-btn--secondary"
-              style={{ padding: '6px 12px', fontSize: 12, textDecoration: 'none' }}
+
+          {/* Visual-only List | Tools sub-pill */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 4,
+              padding: 4,
+              background: 'rgba(201, 214, 228, 0.6)',
+              borderRadius: 16,
+            }}
+          >
+            <span
+              style={{
+                padding: '6px 24px',
+                borderRadius: 12,
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#263856',
+                fontFamily: 'var(--gl-font)',
+                cursor: 'default',
+              }}
             >
-              How to use
-            </a>
-            {userIndex.length > 0 && (
-              <UserSwitcher
-                users={userIndex}
-                activeId={activeUserId}
-                onSelect={handleSelectUser}
-              />
-            )}
-            {/* 23andMe Migration link hidden for now. To re-enable:
-              1. Uncomment the `import Link from 'next/link'` at the top
-              2. Uncomment this block
-              3. Restore the body of app/migrate/page.tsx
-            <Link
-              href="/migrate"
-              className="gl-btn gl-btn--secondary"
-              style={{ padding: '6px 12px', fontSize: 12, textDecoration: 'none' }}
+              List
+            </span>
+            <span
+              style={{
+                padding: '6px 24px',
+                borderRadius: 12,
+                background: '#FFFFFF',
+                boxShadow: '0px 4px 5px rgba(74, 93, 128, 0.13)',
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#263856',
+                fontFamily: 'var(--gl-font)',
+                cursor: 'default',
+              }}
             >
-              23andMe Migration →
-            </Link>
-            */}
-            <span style={{
-              padding: '4px 10px', borderRadius: 6,
-              background: 'rgba(69, 130, 201, 0.1)',
-              color: 'var(--gl-color-secondary)',
-              fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
-            }}>
-              BETA
+              Tools
             </span>
           </div>
         </div>
-      </header>
 
-      {/* Main */}
-      <div style={{ maxWidth: 880, margin: '0 auto', padding: 24 }}>
-        {loading && (
-          <div style={{
-            padding: 32, textAlign: 'center',
-            background: 'var(--gl-color-surface)',
-            borderRadius: 12,
-            boxShadow: 'var(--gl-shadow-sm)',
-            marginBottom: 20,
-            fontSize: 13, color: 'var(--gl-color-text-muted)',
-          }}>
-            Loading matches…
-          </div>
-        )}
-        {/* Stats bar — Figma node 11842:23945 (desktop) / 11842:23955 (mobile) */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-          <div style={statCard}>
-            <div style={statValue}>{matches.length.toLocaleString()}</div>
-            <div style={statLabel}>Total entries</div>
-          </div>
-          <div style={statCard}>
-            <div style={statValue}>{Object.keys(vendorCounts).length}</div>
-            <div style={statLabel}>Vendors</div>
-          </div>
-          <div style={statCard}>
-            <div style={statValue}>{groups.length}</div>
-            <div style={statLabel}>Duplicate groups</div>
-          </div>
-          <div style={statCard}>
-            <div style={statValue}>{mergedMatchIds.size}</div>
-            <div style={statLabel}>Merged</div>
-          </div>
+        {/* Card grid — flex-wrap so 3 fit at 1280, 2 below ~900, 1 on mobile */}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 32,
+            alignItems: 'flex-start',
+          }}
+        >
+          <ToolCard
+            title="Network Graph"
+            description="Explore how your DNA matches connect to each other. Reveal hidden relationships and see your genetic network as a whole."
+            icon={<NetworkGraphIcon />}
+            buttonLabel="Open network"
+            href="#"
+          />
+          <ToolCard
+            title="Clusters"
+            description="Group your matches by genetic similarity. Identify which matches belong together across family lines."
+            icon={<ClustersIcon />}
+            buttonLabel="View clusters"
+            href="#"
+          />
+          <ToolCard
+            title="Match Hub"
+            description="Unified cross-vendor DNA match inbox. Detect and merge the same person across 23andMe, Ancestry, FTDNA, MyHeritage, and GEDmatch."
+            icon={<MatchHubIcon />}
+            buttonLabel="View Hub"
+            href="/match-hub"
+          />
+          <ToolCard
+            title="DNA Painter"
+            description="View your DNA matches on a chromosome map to identify shared genome segments with relatives and their parental origin."
+            icon={<DnaPainterIcon />}
+            comingSoon
+          />
+          <ToolCard
+            title="Family Tree"
+            description="You'll be able to link DNA matches directly to individuals in your family tree. This feature will help you verify relationships and build a clearer picture of your family history."
+            icon={<FamilyTreeIcon />}
+            comingSoon
+          />
         </div>
 
-        {/* Tab switcher — Figma node 11842:24304 (desktop) / 11842:24403 (mobile) */}
-        <div className="tab-switcher" style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 4,
-          marginBottom: 20,
-          background: 'rgba(201, 214, 228, 0.6)',
-          borderRadius: 16,
-          padding: 4,
-          width: 'fit-content',
-        }}>
-          <button
-            onClick={() => setActiveTab('inbox')}
-            className={`tab-pill${activeTab === 'inbox' ? ' tab-pill--active' : ''}`}
-            style={tabButton(activeTab === 'inbox')}
-          >
-            Unified Inbox ({inboxMatches.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('duplicates')}
-            className={`tab-pill${activeTab === 'duplicates' ? ' tab-pill--active' : ''}`}
-            style={tabButton(activeTab === 'duplicates')}
-          >
-            Duplicates ({pendingGroups.length}
-            {pendingGroups.length > 0 && highConfidenceCount > 0 && (
-              <span className="dup-suffix"> · {highConfidenceCount} high-confidence</span>
-            )}
-            )
-          </button>
-        </div>
-
-        {/* Mobile responsive — Figma 11842:24403:
-            - switcher fills the row
-            - inactive tabs shrink to fit
-            - active tab grows to take remaining space
-            - drop the verbose 'high-confidence' suffix on narrow screens */}
         <style jsx>{`
-          @media (max-width: 600px) {
-            .tab-switcher {
-              width: 100% !important;
-            }
-            .tab-pill {
-              flex: 0 1 auto;
-              min-width: 0;
-            }
-            .tab-pill--active {
-              flex: 1 1 auto !important;
-            }
-            .dup-suffix {
-              display: none;
+          @media (max-width: 900px) {
+            :global(.tools-page-content) {
+              padding: 24px 16px 48px !important;
             }
           }
         `}</style>
-
-        {/* Tab content */}
-        {activeTab === 'inbox' ? (
-          <>
-            <div style={{ marginBottom: 16 }}>
-              <VendorFilterBar
-                vendorCounts={vendorCounts}
-                selectedVendors={selectedVendors}
-                onToggle={toggleVendor}
-              />
-            </div>
-
-            <div style={{
-              background: 'var(--gl-color-surface)',
-              borderRadius: 12,
-              padding: 8,
-              boxShadow: 'var(--gl-shadow-sm)',
-            }}>
-              {inboxMatches.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: 'var(--gl-color-text-muted)', fontSize: 13 }}>
-                  No matches in the selected vendors.
-                </div>
-              ) : (
-                inboxMatches.map((m, i) => (
-                  <div
-                    key={m.id}
-                    style={{
-                      borderBottom: i < inboxMatches.length - 1 ? '1px solid var(--gl-color-border-light)' : 'none',
-                    }}
-                  >
-                    <MatchRow match={m} />
-                  </div>
-                ))
-              )}
-            </div>
-
-            {mergedAwayMatchIds.size > 0 && (
-              <p style={{
-                fontSize: 11, color: 'var(--gl-color-text-muted)',
-                marginTop: 12, textAlign: 'center',
-              }}>
-                {mergedAwayMatchIds.size} duplicate {mergedAwayMatchIds.size === 1 ? 'entry' : 'entries'} hidden — they&apos;re merged into the matches above.
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            {/* Duplicates header + bulk actions */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              marginBottom: 16,
-              padding: '12px 16px',
-              background: 'var(--gl-color-surface)',
-              borderRadius: 10,
-              boxShadow: 'var(--gl-shadow-sm)',
-            }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gl-color-primary-dark)' }}>
-                  Detected duplicates
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--gl-color-text-muted)', marginTop: 2 }}>
-                  Same person across multiple vendors. Review and merge to deduplicate your inbox.
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                {highConfidenceCount > 0 && (
-                  <button
-                    onClick={mergeAllHighConfidence}
-                    className="gl-btn gl-btn--primary"
-                    style={{ padding: '6px 12px', fontSize: 12 }}
-                  >
-                    Merge {highConfidenceCount} high-confidence
-                  </button>
-                )}
-                {(mergedMatchIds.size > 0 || rejectedMatchIds.size > 0) && (
-                  <button
-                    onClick={reset}
-                    className="gl-btn gl-btn--secondary"
-                    style={{ padding: '6px 12px', fontSize: 12 }}
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {allGroupsForReview.length === 0 ? (
-                <div style={{
-                  background: 'var(--gl-color-surface)',
-                  borderRadius: 10,
-                  padding: 40,
-                  textAlign: 'center',
-                  color: 'var(--gl-color-text-muted)',
-                  fontSize: 13,
-                }}>
-                  {groups.length === 0
-                    ? 'No duplicates detected across your matches.'
-                    : 'All duplicate groups have been resolved.'}
-                </div>
-              ) : (
-                allGroupsForReview.map(g => (
-                  <DuplicateGroupCard
-                    key={g.id}
-                    group={g}
-                    matches={matches}
-                    decisionState={matchDecisionState}
-                    onMergeMatch={mergeMatch}
-                    onRejectMatch={rejectMatch}
-                    onUndoDecision={undoDecision}
-                  />
-                ))
-              )}
-
-              {rejectedMatchIds.size > 0 && (
-                <p style={{
-                  fontSize: 11, color: 'var(--gl-color-text-muted)',
-                  textAlign: 'center', marginTop: 8,
-                }}>
-                  {rejectedMatchIds.size} record{rejectedMatchIds.size !== 1 ? 's' : ''} marked &quot;not a duplicate&quot;.
-                </p>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Synthetic data disclaimer */}
-        <p style={{
-          marginTop: 32, padding: '8px 12px',
-          textAlign: 'center', fontSize: 10, color: 'var(--gl-color-text-muted)',
-          background: 'rgba(255, 124, 17, 0.04)',
-          border: '1px solid rgba(255, 124, 17, 0.15)',
-          borderRadius: 6,
-        }}>
-          Demo: real DNA-pair data; names, ancestry, and vendor assignments are synthesized.
-        </p>
       </div>
     </div>
   );
-}
-
-// Figma tokens (DNA-Match-Tools): Segment stats 11842:23945 / 11842:23955
-//   container bg = Tertiary/Gray/Semi 20% (#C9D6E4 @ 20% = rgba(201,214,228,0.2))
-//   value        = Primary/Basic Dark (#263856), Platform/H4 Bold (20/28, weight 700)
-//   label        = Tertiary/Gray/Dark 2 (#6786AC), Platform/XS Text Semibold (12/16, weight 600)
-//   geometry     = padding 8/6, gap 4, radius 12, width 112 (min); flex:1 to fill row
-const statCard: React.CSSProperties = {
-  flex: 1,
-  minWidth: 112,
-  padding: '8px 6px',
-  borderRadius: 12,
-  background: 'rgba(201, 214, 228, 0.2)',
-  textAlign: 'center',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 4,
-};
-const statValue: React.CSSProperties = {
-  fontSize: 20,
-  fontWeight: 700,
-  lineHeight: '28px',
-  color: '#263856',
-  fontFamily: 'var(--gl-font)',
-};
-const statLabel: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  lineHeight: '16px',
-  color: '#6786AC',
-  fontFamily: 'var(--gl-font)',
-};
-
-// Figma tokens (DNA-Match-Tools): Tabs row 11842:24304 / 11842:24403
-//   container bg = Tertiary/Gray/Semi 60% (#C9D6E4 @ 60% = rgba(201,214,228,0.6))
-//   active pill  = Primary/Basic White (#FFFFFF) + drop-shadow 0 4px 5px rgba(74,93,128,0.13)
-//   text         = Primary/Basic Dark (#263856), unchanged across active/inactive
-//   typography   = Platform/S Text Semibold (14/20, weight 600)
-function tabButton(active: boolean): React.CSSProperties {
-  return {
-    padding: '6px 24px',
-    border: 'none',
-    background: active ? '#FFFFFF' : 'transparent',
-    color: '#263856',
-    fontSize: 14,
-    fontWeight: 600,
-    lineHeight: '20px',
-    borderRadius: 12,
-    cursor: 'pointer',
-    transition: 'background 0.15s, box-shadow 0.15s',
-    boxShadow: active ? '0px 4px 5px rgba(74, 93, 128, 0.13)' : 'none',
-    fontFamily: 'var(--gl-font)',
-    whiteSpace: 'nowrap',
-  };
 }
