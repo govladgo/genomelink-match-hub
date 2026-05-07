@@ -30,7 +30,10 @@ export default function MatchHubHelpPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#F9FCFF', fontFamily: 'var(--gl-font)' }}>
       <GenomelinkHeader />
-      <MatchHubSubHeader backHref="/match-hub" backLabel="Back to hub" />
+      {/* titleAs="span" — the help card already has its own <h1>How to use
+          Match Hub</h1>; emitting another <h1> from the subheader would
+          give the page two top-level headings (QA_RESULTS.md → Bug B2). */}
+      <MatchHubSubHeader backHref="/match-hub" backLabel="Back to hub" titleAs="span" />
 
       <div
         style={{ maxWidth: 1312, margin: '0 auto', padding: '24px 64px 64px' }}

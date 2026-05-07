@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 
 /**
@@ -22,6 +23,14 @@ interface MatchHubSubHeaderProps {
   /** Right-side link text + target. When omitted, "How it works?" → /match-hub/help. */
   rightHref?: string;
   rightLabel?: string;
+  /**
+   * Tag used for the "Match Hub" title. Defaults to `h1` so /match-hub has
+   * a top-level page heading. Pages that already provide their own `<h1>`
+   * (notably /match-hub/help with "How to use Match Hub") should pass
+   * `titleAs="span"` to avoid emitting two `<h1>`s — that's an a11y / SEO
+   * smell flagged in QA_RESULTS.md (Bug B2).
+   */
+  titleAs?: 'h1' | 'span';
 }
 
 export function MatchHubSubHeader({
@@ -29,6 +38,7 @@ export function MatchHubSubHeader({
   backLabel = 'Back to tools',
   rightHref = '/match-hub/help',
   rightLabel = 'How it works?',
+  titleAs = 'h1',
 }: MatchHubSubHeaderProps = {}) {
   return (
     <div
@@ -74,19 +84,11 @@ export function MatchHubSubHeader({
         }}
       >
         <UsersIcon />
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 24,
-            fontWeight: 600,
-            lineHeight: '32px',
-            color: '#263856',
-            fontFamily: 'var(--gl-font)',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Match Hub
-        </h1>
+        {titleAs === 'h1' ? (
+          <h1 style={titleStyle}>Match Hub</h1>
+        ) : (
+          <span style={titleStyle}>Match Hub</span>
+        )}
       </div>
 
       {/* Right — How it works? */}
@@ -142,6 +144,21 @@ export function MatchHubSubHeader({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Shared style for the centred "Match Hub" title (used by both h1 and span
+// variants so the visual rendering is identical regardless of element).
+// ---------------------------------------------------------------------------
+
+const titleStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 24,
+  fontWeight: 600,
+  lineHeight: '32px',
+  color: '#263856',
+  fontFamily: 'var(--gl-font)',
+  whiteSpace: 'nowrap',
+};
 
 // ---------------------------------------------------------------------------
 // Icons (inline SVG)

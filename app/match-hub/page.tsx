@@ -35,12 +35,22 @@ const POPULATION_LABELS: Record<string, string> = {
 };
 
 // Synthetic kit-id for the Figma-style "{vendor} | Kit: XX-XXXXXX" subtitle.
+//
+// We slice from the *right* (`slice(-6)`) because the simple djb2-style
+// hash ((h << 5) - h + c) only mutates the low bits across short, similar
+// inputs like `user-1`, `user-2` … `user-9` — the upper hex digits stay
+// identical. Slicing the leading 6 chars made those users look the same;
+// the trailing 6 chars differ as expected. XOR-folding the high bits in
+// before slicing makes 4-char hashes (user-10) also look mixed.
 function syntheticKitId(userId: string): string {
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
     hash = ((hash << 5) - hash + userId.charCodeAt(i)) | 0;
   }
-  const hex = Math.abs(hash).toString(16).toUpperCase().padStart(6, '0').slice(0, 6);
+  // Fold the upper 16 bits into the lower 16 bits so even short hashes
+  // distribute, then take the trailing 6 hex chars.
+  const folded = (Math.abs(hash) ^ (Math.abs(hash) >>> 16)) >>> 0;
+  const hex = folded.toString(16).toUpperCase().padStart(6, '0').slice(-6);
   const yy = (24 + (Math.abs(hash) % 3)).toString();
   return `${yy}-${hex}`;
 }
