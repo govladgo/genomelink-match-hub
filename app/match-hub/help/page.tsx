@@ -71,7 +71,9 @@ export default function MatchHubHelpPage() {
           <section style={sectionGroup}>
             <h2 style={h2Style}>Quick start</h2>
             <ol style={orderedList}>
-              <li>Pick a demo user from the switcher next to the user identity.</li>
+              <li>
+                Open Match Hub. Your matches across every connected vendor load automatically.
+              </li>
               <li>
                 The <strong>Duplicates</strong> tab shows every duplicate group the engine
                 detected — sorted with pending work at the top.
@@ -92,8 +94,16 @@ export default function MatchHubHelpPage() {
             </ol>
 
             <Callout label="TIP">
-              The same dataset is shared with the Common Ancestor cM tool. Once you merge duplicates here,
-              opening the same demo user there shows the consolidated view.
+              Decisions you make here flow through to the rest of the DNA Matches PRO tools. Once you
+              merge duplicates, the Common Ancestor cM tool, Network Graph, and Clusters all render
+              the consolidated view automatically.
+            </Callout>
+
+            <Callout label="PROTOTYPE NOTE">
+              This page is a prototype running on synthetic demo data. The dropdown next to your
+              name lets you preview 10 different demo profiles (different ancestries, network
+              shapes, vendor mixes) so you can see how Match Hub behaves across populations. In
+              production you&apos;ll see only your own matches and there will be no switcher.
             </Callout>
           </section>
 
@@ -350,8 +360,9 @@ export default function MatchHubHelpPage() {
               window — pairs outside the ±5% cM window can&apos;t share a bucket, so they&apos;re skipped.
             </p>
             <p style={bodyText}>
-              That cuts comparisons substantially in practice. Dedup completes in well under a second
-              for the largest demo user.
+              That cuts comparisons substantially in practice. Dedup completes in well under a
+              second for typical match lists in the low thousands; performance ceiling sits around
+              10K matches before the engine should move server-side as an async job.
             </p>
           </section>
 
