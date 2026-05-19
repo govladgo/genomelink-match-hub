@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { supportHubUrl } from '@/lib/supportHubUrl';
 
 /**
  * Sub-header for the Match Hub page. Three slots:
@@ -36,7 +37,7 @@ interface MatchHubSubHeaderProps {
 export function MatchHubSubHeader({
   backHref = '/',
   backLabel = 'Back to tools',
-  rightHref = '/match-hub/help',
+  rightHref = supportHubUrl('match-hub'),
   rightLabel = 'How it works?',
   titleAs = 'h1',
 }: MatchHubSubHeaderProps = {}) {
@@ -91,9 +92,10 @@ export function MatchHubSubHeader({
         )}
       </div>
 
-      {/* Right — How it works? */}
+      {/* Right — How it works? (cross-domain to the unified DNA Match Support
+          hub by default, so use a plain <a> rather than next/link). */}
       <div style={{ justifySelf: 'end' }}>
-        <Link
+        <a
           href={rightHref}
           style={{
             display: 'inline-flex',
@@ -109,7 +111,7 @@ export function MatchHubSubHeader({
         >
           <HelpCircleIcon />
           {rightLabel}
-        </Link>
+        </a>
       </div>
 
       <style jsx>{`
